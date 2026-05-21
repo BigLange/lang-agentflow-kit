@@ -1,0 +1,36 @@
+version: 1
+profile: lite
+
+project:
+  feature_dir: features
+  docs_dir: project-docs
+
+spec:
+  provider: agentflow
+  required_outputs:
+    - spec.md
+    - plan.md
+    - tasks.md
+
+orchestrator:
+  provider: codex-subagents
+  mode: subagent
+
+skills:
+  provider: agentflow-core
+  vendored_superpowers: false
+
+integrations:
+  spec_kit:
+    enabled: false
+    mode: optional
+  oh_my_codex:
+    enabled: false
+    mode: optional
+
+gates:
+  require_spec_review: false
+  require_plan_review: false
+  require_task_review: false
+  require_tests_before_done: true
+  require_review_before_commit: false

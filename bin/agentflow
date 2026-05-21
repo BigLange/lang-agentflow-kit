@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  LINK_TARGET="$(readlink "$SOURCE")"
+  if [[ "$LINK_TARGET" == /* ]]; then
+    SOURCE="$LINK_TARGET"
+  else
+    SOURCE="$SOURCE_DIR/$LINK_TARGET"
+  fi
+done
+PACKAGE_ROOT="$(cd "$(dirname "$SOURCE")/.." && pwd)"
+PROJECT_ROOT="$(pwd)"
+CONFIG="$PROJECT_ROOT/agentflow.config.yml"
+FEATURE_DIR="$PROJECT_ROOT/features"
+DOCS_DIR="$PROJECT_ROOT/project-docs"
+TEMPLATE_DIR="$PACKAGE_ROOT/agentflow/templates"
+PROFILE="standard"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bin/agentflow init [--profile lite|standard|full]
+  bin/agentflow feature "Feature title"
+  bin/agentflow check FEATURE-001-title
+  bin/agentflow dispatch FEATURE-001-title
+  bin/agentflow archive FEATURE-001-title
+USAGE
+}
+
+parse_profile() {
+  local profile="standard"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --profile)
+        if [[ $# -lt 2 ]]; then
+          printf 'Missing value for --profile\n' >&2
+          exit 1
+        fi
+        profile="$2"
+        shift 2
+        ;;
+      --profile=*)
+        profile="${1#--profile=}"
+        shift
+        ;;
+      lite|standard|full)
+        profile="$1"
+        shift
+        ;;
+      *)
+        printf 'Unknown init option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  case "$profile" in
+    lite|standard|full)
+      printf '%s' "$profile"
+      ;;
+    *)
+      printf 'Unknown profile: %s\n' "$profile" >&2
+      exit 1
+      ;;
+  esac
+}
+
+slugify() {
+  printf '%s' "$1" |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
+}
+
+next_feature_id() {
+  mkdir -p "$FEATURE_DIR"
+  local last
+  last="$(find "$FEATURE_DIR" -maxdepth 1 -type d -name 'FEATURE-[0-9][0-9][0-9]-*' 2>/dev/null | sed -E 's/.*FEATURE-([0-9]{3})-.*/\1/' | sort -n | tail -1 || true)"
+  if [[ -z "$last" ]]; then
+    printf '001'
+  else
+    printf '%03d' "$((10#$last + 1))"
+  fi
+}
+
+render_template() {
+  local src="$1"
+  local dest="$2"
+  local title="$3"
+  local request="${4:-$title}"
+  awk -v title="$title" -v request="$request" '
+    function replace_all(line, token, value, out, i) {
+      out = ""
+      while ((i = index(line, token)) > 0) {
+        out = out substr(line, 1, i - 1) value
+        line = substr(line, i + length(token))
+      }
+      return out line
+    }
+    {
+      line = replace_all($0, "{{FEATURE_TITLE}}", title)
+      line = replace_all(line, "{{USER_REQUEST}}", request)
+      print line
+    }
+  ' "$src" > "$dest"
+}
+
+render_vars() {
+  local src="$1"
+  local dest="$2"
+  local task_id="$3"
+  local role="$4"
+  local summary="$5"
+  local feature_dir="$6"
+  awk -v task_id="$task_id" -v role="$role" -v summary="$summary" -v feature_dir="$feature_dir" '
+    function replace_all(line, token, value, out, i) {
+      out = ""
+      while ((i = index(line, token)) > 0) {
+        out = out substr(line, 1, i - 1) value
+        line = substr(line, i + length(token))
+      }
+      return out line
+    }
+    {
+      line = replace_all($0, "{{TASK_ID}}", task_id)
+      line = replace_all(line, "{{ROLE}}", role)
+      line = replace_all(line, "{{SUMMARY}}", summary)
+      line = replace_all(line, "{{FEATURE_DIR}}", feature_dir)
+      print line
+    }
+  ' "$src" > "$dest"
+}
+
+copy_if_missing() {
+  local src="$1"
+  local dest="$2"
+  if [[ ! -e "$dest" ]]; then
+    mkdir -p "$(dirname "$dest")"
+    cp -R "$src" "$dest"
+  fi
+}
+
+ensure_runtime_dirs() {
+  mkdir -p "$FEATURE_DIR" "$DOCS_DIR/records/dispatch" "$DOCS_DIR/records/done" "$DOCS_DIR/records/review" "$DOCS_DIR/records/test" "$DOCS_DIR/subagent"
+
+  if [[ ! -f "$DOCS_DIR/03_TASK_BOARD.md" ]]; then
+    cp "$TEMPLATE_DIR/project-docs/03_TASK_BOARD.md" "$DOCS_DIR/03_TASK_BOARD.md"
+  fi
+
+  if [[ ! -f "$DOCS_DIR/02_API_SPEC.md" ]]; then
+    cp "$TEMPLATE_DIR/project-docs/02_API_SPEC.md" "$DOCS_DIR/02_API_SPEC.md"
+  fi
+}
+
+init_project() {
+  local profile="${1:-standard}"
+  ensure_runtime_dirs
+  mkdir -p "$PROJECT_ROOT/.agentflow/agents" "$PROJECT_ROOT/.agentflow/workflows" "$PROJECT_ROOT/.agentflow/templates" "$PROJECT_ROOT/.agentflow/integrations" "$PROJECT_ROOT/.agentflow/records"
+
+  cp "$TEMPLATE_DIR/config/$profile.yml" "$CONFIG"
+  cp -R "$PACKAGE_ROOT/agentflow/roles/." "$PROJECT_ROOT/.agentflow/agents/"
+  cp -R "$PACKAGE_ROOT/agentflow/templates/feature/." "$PROJECT_ROOT/.agentflow/templates/"
+  cp -R "$PACKAGE_ROOT/agentflow/templates/records/." "$PROJECT_ROOT/.agentflow/templates/"
+
+  if [[ "$profile" == "standard" || "$profile" == "full" ]]; then
+    mkdir -p "$PROJECT_ROOT/.agentflow/skills"
+    cp -R "$PACKAGE_ROOT/agentflow/skills/." "$PROJECT_ROOT/.agentflow/skills/"
+  fi
+
+  if [[ "$profile" == "full" ]]; then
+    cp "$TEMPLATE_DIR/integrations/oh-my-codex.yml" "$PROJECT_ROOT/.agentflow/integrations/oh-my-codex.yml"
+  fi
+
+  printf 'AgentFlow initialized with profile: %s\n' "$profile"
+}
+
+create_feature() {
+  local request="$1"
+  local id slug name dir
+  id="$(next_feature_id)"
+  slug="$(slugify "$request")"
+  if [[ -z "$slug" ]]; then
+    slug="feature"
+  fi
+  name="FEATURE-$id-$slug"
+  dir="$FEATURE_DIR/$name"
+
+  mkdir -p "$dir/implementation" "$dir/results" "$dir/reviews"
+
+  render_template "$TEMPLATE_DIR/feature/spec.md" "$dir/spec.md" "$request" "$request"
+  render_template "$TEMPLATE_DIR/feature/spec-review.md" "$dir/spec-review.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/plan.md" "$dir/plan.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/plan-review.md" "$dir/plan-review.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/tasks.md" "$dir/tasks.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/task-review.md" "$dir/task-review.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/dispatch.md" "$dir/dispatch.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/archive.md" "$dir/archive.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-api.md" "$dir/implementation/api.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-backend.md" "$dir/results/backend.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-frontend.md" "$dir/results/frontend.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-mobile.md" "$dir/results/mobile.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-test.md" "$dir/implementation/test.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request"
+
+  printf 'Created %s\n' "$dir"
+}
+
+feature_path() {
+  local feature="$1"
+  if [[ -d "$feature" ]]; then
+    printf '%s' "$feature"
+  elif [[ -d "$FEATURE_DIR/$feature" ]]; then
+    printf '%s' "$FEATURE_DIR/$feature"
+  else
+    printf 'Unknown feature: %s\n' "$feature" >&2
+    exit 1
+  fi
+}
+
+check_feature() {
+  local dir missing=0
+  dir="$(feature_path "$1")"
+
+  for path in spec.md spec-review.md plan.md plan-review.md tasks.md task-review.md dispatch.md archive.md implementation/api.md implementation/test.md implementation/review.md; do
+    if [[ ! -f "$dir/$path" ]]; then
+      printf 'Missing: %s\n' "$dir/$path"
+      missing=1
+    fi
+  done
+
+  if grep -R -n 'TBD' "$dir" >/tmp/agentflow-tbd.$$ 2>/dev/null; then
+    printf 'Open placeholders:\n'
+    cat /tmp/agentflow-tbd.$$
+  fi
+  rm -f /tmp/agentflow-tbd.$$
+
+  if [[ "$missing" -eq 0 ]]; then
+    printf 'Feature bundle structure is complete: %s\n' "$dir"
+  else
+    exit 1
+  fi
+}
+
+dispatch_feature() {
+  local dir title task_id record
+  dir="$(feature_path "$1")"
+  title="$(basename "$dir")"
+  task_id="${title/FEATURE-/TASK-}"
+
+  ensure_runtime_dirs
+  record="$DOCS_DIR/records/dispatch/${task_id}_subagent_dispatch.md"
+
+  render_vars "$TEMPLATE_DIR/records/dispatch-record.md" "$record" "$task_id" "Implementation Team" "Implement $title from Feature Bundle" "$dir"
+
+  printf 'Created subagent dispatch record: %s\n' "$record"
+  printf 'Use subagents from %s.\n' "$dir/dispatch.md"
+}
+
+archive_feature() {
+  local dir title line board
+  dir="$(feature_path "$1")"
+  title="$(basename "$dir")"
+  ensure_runtime_dirs
+  board="$DOCS_DIR/03_TASK_BOARD.md"
+  line="| $title | $title | archive | subagent | Manager | pending | no | See $dir/archive.md |"
+
+  if ! grep -F "$title" "$board" >/dev/null 2>&1; then
+    printf '%s\n' "$line" >> "$board"
+  fi
+
+  printf 'Archive linked in task board: %s\n' "$board"
+}
+
+main() {
+  if [[ $# -lt 1 ]]; then
+    usage
+    exit 1
+  fi
+
+  case "$1" in
+    init)
+      shift
+      PROFILE="$(parse_profile "$@")"
+      init_project "$PROFILE"
+      ;;
+    feature)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      create_feature "$2"
+      ;;
+    check)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      check_feature "$2"
+      ;;
+    dispatch)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      dispatch_feature "$2"
+      ;;
+    archive)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      archive_feature "$2"
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

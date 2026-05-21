@@ -1,0 +1,23 @@
+{
+  "name": "lang-agentflow-kit",
+  "version": "0.1.0",
+  "description": "Lang-flavored subagent-first project workflow initializer inspired by spec-kit, Superpowers, and adapter-based orchestration.",
+  "type": "commonjs",
+  "bin": {
+    "agentflow": "bin/agentflow"
+  },
+  "files": [
+    "bin/",
+    "agentflow/",
+    "install.sh",
+    "agentflow.config.yml"
+  ],
+  "scripts": {
+    "check": "bash -n bin/agentflow && bash -n install.sh",
+    "pack:check": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

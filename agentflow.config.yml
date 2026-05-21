@@ -1,0 +1,41 @@
+version: 1
+project:
+  name: spec-kit-demo
+  feature_dir: features
+  docs_dir: project-docs
+
+spec:
+  provider: spec-kit
+  source_dir: specs
+  required_outputs:
+    - spec.md
+    - plan.md
+    - tasks.md
+
+orchestrator:
+  provider: codex-subagents
+  default_mode: subagent
+  long_task_default: true
+
+skills:
+  provider: superpowers
+  role_method_map:
+    spec_creator: brainstorming
+    plan_creator: writing-plans
+    implementer: subagent-driven-development
+    reviewer: requesting-code-review
+    tester: test-driven-development
+    fixer: systematic-debugging
+
+archive:
+  provider: records
+  records_dir: project-docs/records
+  task_board: project-docs/03_TASK_BOARD.md
+  subagent_dir: project-docs/subagent
+
+gates:
+  require_spec_review: true
+  require_plan_review: true
+  require_task_review: true
+  require_tests_before_done: true
+  require_review_before_commit: true

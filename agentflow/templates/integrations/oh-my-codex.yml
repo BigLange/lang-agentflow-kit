@@ -1,0 +1,30 @@
+enabled: true
+mode: team-pipeline
+
+team:
+  manager: manager
+  workers:
+    - api-designer
+    - backend-implementer
+    - frontend-implementer
+    - mobile-implementer
+    - test-agent
+    - code-reviewer
+    - fix-agent
+    - commit-agent
+
+pipeline:
+  - spec
+  - plan
+  - tasks
+  - api
+  - implement
+  - test
+  - review
+  - fix
+  - archive
+
+feature_bundle:
+  root: features
+  dispatch_file: dispatch.md
+  records_dir: project-docs/records

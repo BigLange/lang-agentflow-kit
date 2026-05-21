@@ -1,0 +1,39 @@
+version: 1
+profile: full
+
+project:
+  feature_dir: features
+  docs_dir: project-docs
+
+spec:
+  provider: spec-kit-compatible
+  required_outputs:
+    - spec.md
+    - plan.md
+    - tasks.md
+
+orchestrator:
+  provider: oh-my-codex
+  mode: team-pipeline
+  fallback_provider: codex-subagents
+
+skills:
+  provider: vendored-superpowers
+  vendored_superpowers: true
+
+integrations:
+  spec_kit:
+    enabled: true
+    mode: external-compatible
+  oh_my_codex:
+    enabled: true
+    mode: adapter
+    config: .agentflow/integrations/oh-my-codex.yml
+
+gates:
+  require_spec_review: true
+  require_plan_review: true
+  require_task_review: true
+  require_tests_before_done: true
+  require_review_before_commit: true
+  require_archive_before_done: true
