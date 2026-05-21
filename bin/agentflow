@@ -145,6 +145,14 @@ copy_if_missing() {
 ensure_runtime_dirs() {
   mkdir -p "$FEATURE_DIR" "$DOCS_DIR/records/dispatch" "$DOCS_DIR/records/done" "$DOCS_DIR/records/review" "$DOCS_DIR/records/test" "$DOCS_DIR/subagent"
 
+  if [[ ! -f "$DOCS_DIR/00_PROJECT_CONTEXT.md" ]]; then
+    cp "$TEMPLATE_DIR/project-docs/00_PROJECT_CONTEXT.md" "$DOCS_DIR/00_PROJECT_CONTEXT.md"
+  fi
+
+  if [[ ! -f "$DOCS_DIR/01_ARCHITECTURE.md" ]]; then
+    cp "$TEMPLATE_DIR/project-docs/01_ARCHITECTURE.md" "$DOCS_DIR/01_ARCHITECTURE.md"
+  fi
+
   if [[ ! -f "$DOCS_DIR/03_TASK_BOARD.md" ]]; then
     cp "$TEMPLATE_DIR/project-docs/03_TASK_BOARD.md" "$DOCS_DIR/03_TASK_BOARD.md"
   fi
@@ -158,6 +166,10 @@ init_project() {
   local profile="${1:-standard}"
   ensure_runtime_dirs
   mkdir -p "$PROJECT_ROOT/.agentflow/agents" "$PROJECT_ROOT/.agentflow/workflows" "$PROJECT_ROOT/.agentflow/templates" "$PROJECT_ROOT/.agentflow/integrations" "$PROJECT_ROOT/.agentflow/records"
+
+  if [[ ! -f "$PROJECT_ROOT/AGENTS.md" ]]; then
+    cp "$TEMPLATE_DIR/project/AGENTS.md" "$PROJECT_ROOT/AGENTS.md"
+  fi
 
   cp "$TEMPLATE_DIR/config/$profile.yml" "$CONFIG"
   cp -R "$PACKAGE_ROOT/agentflow/roles/." "$PROJECT_ROOT/.agentflow/agents/"

@@ -70,8 +70,11 @@ The runtime path is subagent-first. Records are persisted under
   templates/
   skills/                 # standard/full only
   integrations/           # full includes oh-my-codex.yml
+AGENTS.md
 agentflow.config.yml
 project-docs/
+  00_PROJECT_CONTEXT.md
+  01_ARCHITECTURE.md
   02_API_SPEC.md
   03_TASK_BOARD.md
   records/

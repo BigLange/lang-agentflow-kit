@@ -14,7 +14,7 @@ Installs Lang AgentFlow Kit into the target project:
   - bin/agentflow
   - agentflow/
   - agentflow.config.yml
-  - project-docs records/task board/API docs via bin/agentflow init
+  - AGENTS.md and project-docs via bin/agentflow init
 USAGE
 }
 
