@@ -28,19 +28,19 @@ in config, the CLI must not generate it, check it, or block on it.
 
 ### Work Items
 
-- [ ] Load `agentflow.config.yml` from the project root.
-- [ ] Fall back to built-in defaults when config is missing.
-- [ ] Implement effective config merging:
+- [x] Load `agentflow.config.yml` from the project root.
+- [x] Fall back to built-in defaults when config is missing.
+- [x] Implement effective config merging:
 
 ```text
 default config + user config = effective config
 ```
 
-- [ ] Make `create_feature` generate files from effective config.
-- [ ] Make `check` derive required files from effective config instead of a hardcoded file list.
-- [ ] If `gates.require_spec_review: false`, do not generate or require `spec-review.md`.
-- [ ] If `implementation.target_sides: [backend]`, generate and check only backend implementation outputs.
-- [ ] Document which config keys are runtime-enforced and which remain descriptive.
+- [x] Make `create_feature` generate files from effective config.
+- [x] Make `check` derive required files from effective config instead of a hardcoded file list.
+- [x] If `gates.require_spec_review: false`, do not generate or require `spec-review.md`.
+- [x] If `implementation.target_sides: [backend]`, generate and check only backend implementation outputs.
+- [x] Document which config keys are runtime-enforced and which remain descriptive.
 
 ### Example
 

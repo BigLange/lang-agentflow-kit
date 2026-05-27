@@ -45,6 +45,12 @@ gates:
   require_summary_records_for_done: true
   require_tests_before_done: true
   require_review_before_commit: true
+
+implementation:
+  target_sides:
+    - backend
+    - frontend
+    - mobile
 ```
 
 ## Runtime-Read Keys
@@ -152,6 +158,28 @@ runtime simple and easy to parse from shell.
 - `gates.require_archive_before_done`
   Currently descriptive in templates. The runtime already models `done` as
   strictly after `archive`, so this key is effectively redundant today.
+
+### `implementation`
+
+- `implementation.target_sides`
+  Default: `backend`, `frontend`, `mobile`
+  Runtime-enforced list of implementation result sides. Supported values are
+  `backend`, `frontend`, and `mobile`.
+
+  `agentflow feature create` only generates `results/<side>.md` for configured
+  sides. `agentflow check`, `agentflow feature verify`, `agentflow feature
+  gate`, and generated active context only require those same result files.
+
+  Example backend-only project:
+
+  ```yaml
+  implementation:
+    target_sides:
+      - backend
+  ```
+
+  This project will not generate or require `results/frontend.md` or
+  `results/mobile.md`.
 
 Future versions may replace or supplement the global booleans with per-stage
 structured rules:
@@ -279,7 +307,7 @@ Stage checks are currently encoded by `bin/agentflow`:
 | `plan` | `spec` passes, `plan.md` has no placeholders, and `plan-review.md` passes when required |
 | `tasks` | `plan` passes, `tasks.md` contains delivery tasks, and `task-review.md` passes when required |
 | `dispatch` | `tasks` passes and `dispatch.md` has role assignment rows |
-| `implement` | `dispatch` passes and implementation result records are complete |
+| `implement` | `dispatch` passes and configured implementation result records are complete |
 | `test` | `implement` passes and `implementation/test.md` is complete when required |
 | `review` | `test` passes and `implementation/review.md` is complete when required |
 | `fix` | `review` passes and `results/fix.md` is complete |

@@ -226,6 +226,16 @@ features/FEATURE-XXX-name/
 └── archive.md
 ```
 
+实际生成内容由项目根目录的 `agentflow.config.yml` 控制。如果配置不存在，
+CLI 使用内置默认配置。当前已 runtime-enforced 的开关包括：
+
+- `gates.require_spec_review: false`：不生成、不检查 `spec-review.md`，也不因
+  spec review 缺失阻塞 gate。
+- `gates.require_plan_review: false`：不生成、不检查 `plan-review.md`。
+- `gates.require_task_review: false`：不生成、不检查 `task-review.md`。
+- `implementation.target_sides`：只生成和检查列出的实现结果文件。例如只配置
+  `backend` 时，不生成、不检查 `results/frontend.md` 和 `results/mobile.md`。
+
 ## Workflow Stages
 
 完整开发链路可以理解为：
@@ -348,7 +358,17 @@ gates:
   require_task_review: true
   require_tests_before_done: true
   require_review_before_commit: true
+
+implementation:
+  target_sides:
+    - backend
+    - frontend
+    - mobile
 ```
+
+`agentflow feature create`、`agentflow check`、`agentflow feature verify` 和
+`agentflow feature gate` 都按默认配置与用户配置合并后的 effective config
+执行。关闭的 review/result 文件不会被生成、检查或作为 gate blocker。
 
 这保持了 v1 runtime 的简单性。后续如果要支持更细的项目差异，可以演进成 per-stage structured rules，例如：
 

@@ -245,6 +245,68 @@ config_string() {
   printf '%s' "$value"
 }
 
+config_list() {
+  local section="$1"
+  local key="$2"
+  local default_values="$3"
+  local values=""
+  if [[ -f "$CONFIG" ]]; then
+    values="$(yaml_list_under_section_key "$section" "$key" "$CONFIG" || true)"
+  fi
+  if [[ -n "$values" ]]; then
+    printf '%s\n' "$values"
+  else
+    printf '%s\n' "$default_values"
+  fi
+}
+
+implementation_target_sides() {
+  config_list "implementation" "target_sides" "backend
+frontend
+mobile" |
+    sed -E 's/[[:space:]]+#.*$//; s/^["'\'']//; s/["'\'']$//' |
+    awk '
+      $0 == "backend" || $0 == "frontend" || $0 == "mobile" {
+        if (!seen[$0]++) print
+      }
+    '
+}
+
+side_is_enabled() {
+  local side="$1"
+  local enabled_side
+  while IFS= read -r enabled_side; do
+    [[ "$enabled_side" == "$side" ]] && return 0
+  done < <(implementation_target_sides)
+  return 1
+}
+
+required_feature_files() {
+  printf '%s\n' spec.md plan.md tasks.md dispatch.md archive.md implementation/api.md
+
+  if [[ "$(config_bool "gates" "require_spec_review" "true")" == "true" ]]; then
+    printf '%s\n' spec-review.md
+  fi
+  if [[ "$(config_bool "gates" "require_plan_review" "true")" == "true" ]]; then
+    printf '%s\n' plan-review.md
+  fi
+  if [[ "$(config_bool "gates" "require_task_review" "true")" == "true" ]]; then
+    printf '%s\n' task-review.md
+  fi
+  if [[ "$(config_bool "gates" "require_tests_before_done" "true")" == "true" ]]; then
+    printf '%s\n' implementation/test.md
+  fi
+  if [[ "$(config_bool "gates" "require_review_before_commit" "true")" == "true" ]]; then
+    printf '%s\n' implementation/review.md
+  fi
+
+  local side
+  while IFS= read -r side; do
+    printf 'results/%s.md\n' "$side"
+  done < <(implementation_target_sides)
+  printf '%s\n' results/fix.md
+}
+
 replace_runtime_tokens() {
   local text="$1"
   local feature_name="$2"
@@ -473,7 +535,7 @@ init_project() {
 
 create_feature() {
   local request="$1"
-  local id slug name dir
+  local id slug name dir side
   load_project_paths
   id="$(next_feature_id)"
   slug="$(slugify "$request")"
@@ -486,20 +548,30 @@ create_feature() {
   mkdir -p "$dir/implementation" "$dir/results" "$dir/reviews"
 
   render_template "$TEMPLATE_DIR/feature/spec.md" "$dir/spec.md" "$request" "$request"
-  render_template "$TEMPLATE_DIR/feature/spec-review.md" "$dir/spec-review.md" "$request"
+  if [[ "$(config_bool "gates" "require_spec_review" "true")" == "true" ]]; then
+    render_template "$TEMPLATE_DIR/feature/spec-review.md" "$dir/spec-review.md" "$request"
+  fi
   render_template "$TEMPLATE_DIR/feature/plan.md" "$dir/plan.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/plan-review.md" "$dir/plan-review.md" "$request"
+  if [[ "$(config_bool "gates" "require_plan_review" "true")" == "true" ]]; then
+    render_template "$TEMPLATE_DIR/feature/plan-review.md" "$dir/plan-review.md" "$request"
+  fi
   render_template "$TEMPLATE_DIR/feature/tasks.md" "$dir/tasks.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/task-review.md" "$dir/task-review.md" "$request"
+  if [[ "$(config_bool "gates" "require_task_review" "true")" == "true" ]]; then
+    render_template "$TEMPLATE_DIR/feature/task-review.md" "$dir/task-review.md" "$request"
+  fi
   render_template "$TEMPLATE_DIR/feature/dispatch.md" "$dir/dispatch.md" "$request"
   render_template "$TEMPLATE_DIR/feature/archive.md" "$dir/archive.md" "$request"
   render_template "$TEMPLATE_DIR/feature/implementation-api.md" "$dir/implementation/api.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/implementation-backend.md" "$dir/results/backend.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/implementation-frontend.md" "$dir/results/frontend.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/implementation-mobile.md" "$dir/results/mobile.md" "$request"
+  while IFS= read -r side; do
+    render_template "$TEMPLATE_DIR/feature/implementation-$side.md" "$dir/results/$side.md" "$request"
+  done < <(implementation_target_sides)
   render_template "$TEMPLATE_DIR/feature/implementation-fix.md" "$dir/results/fix.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/implementation-test.md" "$dir/implementation/test.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request"
+  if [[ "$(config_bool "gates" "require_tests_before_done" "true")" == "true" ]]; then
+    render_template "$TEMPLATE_DIR/feature/implementation-test.md" "$dir/implementation/test.md" "$request"
+  fi
+  if [[ "$(config_bool "gates" "require_review_before_commit" "true")" == "true" ]]; then
+    render_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request"
+  fi
 
   printf 'Created %s\n' "$dir"
 }
@@ -518,15 +590,15 @@ feature_path() {
 }
 
 check_feature() {
-  local dir missing=0
+  local dir path missing=0
   dir="$(feature_path "$1")"
 
-  for path in spec.md spec-review.md plan.md plan-review.md tasks.md task-review.md dispatch.md archive.md implementation/api.md implementation/test.md implementation/review.md; do
+  while IFS= read -r path; do
     if [[ ! -f "$dir/$path" ]]; then
       printf 'Missing: %s\n' "$dir/$path"
       missing=1
     fi
-  done
+  done < <(required_feature_files)
 
   if grep -R -n 'TBD' "$dir" >/tmp/agentflow-tbd.$$ 2>/dev/null; then
     printf 'Open placeholders:\n'
@@ -665,21 +737,62 @@ verify_stage_dispatch() {
 
 verify_stage_implement() {
   local dir="$1"
-  local result_file found_result=0
+  local side target_sides
   verify_stage_dispatch "$dir"
 
   verify_structured_record "$dir/implementation/api.md" "implementation/api.md"
 
-  for result_file in "$dir/results/backend.md" "$dir/results/frontend.md" "$dir/results/mobile.md"; do
-    if [[ -f "$result_file" ]]; then
-      found_result=1
-      verify_structured_record "$result_file" "$(basename "$result_file")"
-    fi
-  done
-
-  if [[ "$found_result" -eq 0 ]]; then
-    add_verify_error "implementation results are missing under $dir/results/"
+  target_sides="$(implementation_target_sides)"
+  if [[ -z "$target_sides" ]]; then
+    add_verify_error "implementation.target_sides must include at least one of: backend, frontend, mobile"
+    return
   fi
+
+  while IFS= read -r side; do
+    verify_structured_record "$dir/results/$side.md" "results/$side.md"
+  done <<< "$target_sides"
+}
+
+effective_key_files() {
+  local dir="$1"
+  local feature_name="$2"
+  local task_id side
+
+  printf '%s\n' \
+    "$dir/spec.md" \
+    "$dir/plan.md" \
+    "$dir/tasks.md" \
+    "$dir/dispatch.md" \
+    "$dir/implementation/api.md"
+
+  if [[ "$(config_bool "gates" "require_spec_review" "true")" == "true" ]]; then
+    printf '%s\n' "$dir/spec-review.md"
+  fi
+  if [[ "$(config_bool "gates" "require_plan_review" "true")" == "true" ]]; then
+    printf '%s\n' "$dir/plan-review.md"
+  fi
+  if [[ "$(config_bool "gates" "require_task_review" "true")" == "true" ]]; then
+    printf '%s\n' "$dir/task-review.md"
+  fi
+
+  while IFS= read -r side; do
+    printf '%s\n' "$dir/results/$side.md"
+  done < <(implementation_target_sides)
+
+  if [[ "$(config_bool "gates" "require_tests_before_done" "true")" == "true" ]]; then
+    printf '%s\n' "$dir/implementation/test.md"
+  fi
+  if [[ "$(config_bool "gates" "require_review_before_commit" "true")" == "true" ]]; then
+    printf '%s\n' "$dir/implementation/review.md"
+  fi
+
+  task_id="$(task_id_from_title "$feature_name")"
+  printf '%s\n' \
+    "$dir/results/fix.md" \
+    "$dir/archive.md" \
+    "$(review_record_path "$task_id")" \
+    "$(test_record_path "$task_id")" \
+    "$(done_record_path "$task_id")"
 }
 
 verify_stage_test() {
@@ -987,21 +1100,7 @@ build_active_context() {
   output_file="$STATE_DIR/$ACTIVE_CONTEXT_FILE"
 
   open_tasks="$(grep -E '^- \[ \] T[0-9]{3}' "$dir/tasks.md" 2>/dev/null || true)"
-  key_files="$(printf '%s\n' \
-    "$dir/spec.md" \
-    "$dir/plan.md" \
-    "$dir/tasks.md" \
-    "$dir/dispatch.md" \
-    "$dir/results/backend.md" \
-    "$dir/results/frontend.md" \
-    "$dir/results/mobile.md" \
-    "$dir/implementation/test.md" \
-    "$dir/implementation/review.md" \
-    "$dir/results/fix.md" \
-    "$dir/archive.md" \
-    "$(review_record_path "$(task_id_from_title "$feature_name")")" \
-    "$(test_record_path "$(task_id_from_title "$feature_name")")" \
-    "$(done_record_path "$(task_id_from_title "$feature_name")")")"
+  key_files="$(effective_key_files "$dir" "$feature_name")"
 
   cat > "$output_file" <<JSON
 {

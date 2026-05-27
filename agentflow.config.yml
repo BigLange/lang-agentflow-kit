@@ -41,6 +41,12 @@ runtime:
   enforce_archive_gate: true
   hook_failure_policy: stop
 
+implementation:
+  target_sides:
+    - backend
+    - frontend
+    - mobile
+
 hooks:
   before_plan:
   before_tasks:
