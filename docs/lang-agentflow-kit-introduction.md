@@ -30,6 +30,11 @@ features/
 - Markdown 协议层：`AGENTS.md`、`project-docs/`、feature bundle 和 records。
 - 轻量 runtime 守卫层：`agentflow feature verify`、`gate`、`context`、`next` 和 `status`。
 
+当前 `0.5.0` 版本完成了一轮 hardening：YAML 配置开始真正控制生成和检查，gate
+语义更清晰，active context 更适合长任务交接，任务板改为由 state 渲染，并加入了
+review isolation。也就是说，AgentFlow 不再只是生成 Markdown 模板，而是在保留
+Markdown 灵活性的前提下，把关键流程变成可执行、可检查、可交接的本地协议。
+
 ## 安装方式
 
 当前可以通过 GitHub 安装：
@@ -173,6 +178,19 @@ features/FEATURE-XXX-name/
 
 feature bundle 用于承载单个功能从需求到实现再到归档的完整链路。
 
+实际生成哪些 review 文件、哪些实现端结果文件，由 `agentflow.config.yml` 的
+effective config 决定。例如：
+
+- `gates.require_spec_review: false` 时，不生成、不检查 `spec-review.md`。
+- `gates.require_plan_review: false` 时，不生成、不检查 `plan-review.md`。
+- `gates.require_task_review: false` 时，不生成、不检查 `task-review.md`。
+- `implementation.target_sides: [backend]` 时，只生成并检查 backend result，不再因为
+  frontend/mobile result 缺失而阻塞 gate。
+
+这个改进的直接收益是：配置不再只是说明文档。项目可以根据真实技术形态裁剪流程，
+CLI 也会按同一份配置生成、检查和阻断，减少“模板有但项目不用”“配置关闭但 gate
+还在报错”的摩擦。
+
 日常推进推荐使用：
 
 ```bash
@@ -193,12 +211,103 @@ draft -> spec -> plan -> tasks -> dispatch -> implement -> test -> review -> fix
 其中：
 
 - `verify` 检查某个阶段是否完成。
-- `gate` 检查能否进入下一个阶段。
-- `context` 生成 `.agentflow/state/active_context.json`，帮助 Agent 在长任务前刷新当前工作视图。
+- `check` 检查 feature bundle 结构、配置要求的文件和明显占位符。
+- `gate` 检查某个阶段是否可以通过，不写状态、不同步任务、不归档。
+- `context` 生成 `.agentflow/state/active_context.md` 和 `.agentflow/state/active_context.json`，帮助 Agent 在长任务前刷新当前工作视图。
 - `status` 汇总 feature 的真实 runtime 状态。
 - `next` 把 gate、task sync、context refresh 和状态输出串起来，作为默认日常命令。
 
 这套 guardrails 不是要替代 Markdown，而是让 Markdown 合同变成可执行的阶段约束。
+
+推荐的调试命令面是：
+
+```bash
+agentflow check FEATURE-001-user-auth
+agentflow gate spec FEATURE-001-user-auth
+agentflow gate plan FEATURE-001-user-auth
+agentflow feature context FEATURE-001-user-auth
+```
+
+这样做的好处是：
+
+- `check` 只回答结构是否完整，适合快速发现缺文件和模板残留。
+- `gate` 只回答阶段能不能过，输出稳定的 `Gate Decision` 和 `Blockers`。
+- `next` 才负责推进流程，因此不会因为一次“只想看看 gate”的操作意外同步状态或写 records。
+- Agent 接手长任务时可以先读 `active_context.md`，再打开被引用的少量文件，减少从长文档里重新摸索上下文。
+
+`active_context.md` 会以固定工作合同开头：
+
+```text
+This is the current working contract.
+Start from this file before doing any work.
+Do not start coding before checking the current gate.
+Only open additional docs/files when this context references them or the current task requires verification.
+```
+
+这让后续操作更可控：新的 Agent 不需要先翻完整 README、全部 feature 文件和历史记录，而是先读一个短上下文，确认当前 gate、必读文件、禁止动作和下一步。
+
+## State-backed Task Board
+
+`project-docs/03_TASK_BOARD.md` 现在是渲染结果，不再是 feature 状态源数据。源数据在：
+
+```text
+.agentflow/state/features.yml
+```
+
+重新渲染任务板：
+
+```bash
+agentflow board render
+```
+
+`feature create` 和 `feature archive` 会更新 `features.yml` 并重新渲染 Markdown board。
+如果需要人工修正任务板状态，应编辑 `features.yml`，再运行 `agentflow board render`。
+
+这个改进解决的是长期项目里常见的 Markdown 表格问题：
+
+- 表格手改容易破坏格式。
+- 多人或多 Agent 同时追加 Markdown 行容易冲突。
+- runtime 很难稳定解析任意手写 Markdown。
+- state 文件更适合作为机器可读源数据，Markdown 则继续保留为人类可读视图。
+
+后续操作的收益是：Manager 可以把 `features.yml` 当作项目状态数据源，把
+`03_TASK_BOARD.md` 当作随时可重建的展示层。任务板坏了可以重新 render，而不是人工修表。
+
+## Review Isolation
+
+`0.5.0` 加入了 review isolation。它不是自动生成多个 reviewer，而是先在协议层防止
+“自己写、自己无声批准”。
+
+配置示例：
+
+```yaml
+review:
+  spec:
+    mode: self
+  plan:
+    mode: separate-session
+  tasks:
+    mode: self
+  implementation:
+    mode: human
+```
+
+支持三种模式：
+
+- `self`：兼容默认模式，当前会话可以自审，但 gate 会输出弱隔离 warning。
+- `separate-session`：review 文件必须包含外部 review metadata，例如
+  `review_mode: separate-session`、`reviewer: external`、`decision`、
+  `blocking_issues: 0` 和 `reviewed_at`。
+- `human`：必须通过 CLI 写入批准元数据：
+
+```bash
+agentflow approve FEATURE-001-user-auth --stage spec
+```
+
+这个改进的收益是：项目可以按风险分层控制 review 强度。低风险阶段保留 self review
+的低成本；高风险实现审查可以要求 human approval；需要独立 AI session 审查的阶段可以
+要求 separate-session metadata。gate 会把缺失的批准或外部审查明确报出来，避免 review
+文件只是“看起来存在”。
 
 ## Subagent-first 架构
 
@@ -312,7 +421,8 @@ features/FEATURE-XXX-*/archive.md
 推荐 Git 策略：
 
 - durable knowledge 进入 Git：spec、plan、tasks、test/review summary、done summary 和 archive。
-- transient runtime state 不进入 Git：`.agentflow/state/`。
+- task board state 进入 Git：`.agentflow/state/features.yml`。
+- transient runtime state 不进入 Git：`.agentflow/state/*` 中除 `features.yml` 之外的文件。
 - dispatch records 默认按高频 transient log 处理；需要审计派发历史的项目可以选择纳入 Git。
 
 ## 迁移已有项目
@@ -338,6 +448,11 @@ features/FEATURE-XXX-*/archive.md
 - 项目级文档模板
 - feature bundle 模板
 - runtime verify/gate/context
+- YAML-driven feature generation and checks
+- `check` / `gate` 语义拆分
+- Markdown + JSON active context
+- state-backed task board rendering
+- review isolation and CLI approval metadata
 - daily workflow commands: `feature create`、`feature next`、`feature status`
 - optional hooks
 - 角色定义
@@ -350,6 +465,7 @@ features/FEATURE-XXX-*/archive.md
 - spec-kit 命令
 - Oh My Codex runtime
 - 自动 spawn 全部 subagent
+- 数据库或后台 daemon
 
 这些能力可以作为后续 adapter 继续接入。
 
