@@ -84,65 +84,65 @@ canonical form.
 
 ### `check` Responsibilities
 
-- [ ] Feature directory exists.
-- [ ] Config-required files exist.
-- [ ] Obvious placeholders are removed.
-- [ ] File structure is internally complete.
+- [x] Feature directory exists.
+- [x] Config-required files exist.
+- [x] Obvious placeholders are removed.
+- [x] File structure is internally complete.
 
 ### `gate` Responsibilities
 
-- [ ] Decide whether the current stage is allowed to advance.
-- [ ] Report the blocking reason in stable, agent-readable language.
-- [ ] Avoid mutating feature state unless explicitly requested.
+- [x] Decide whether the current stage is allowed to advance.
+- [x] Report the blocking reason in stable, agent-readable language.
+- [x] Avoid mutating feature state unless explicitly requested.
 
 ### Gate Rules
 
 #### spec gate
 
-- [ ] `spec.md` exists.
-- [ ] `spec.md` does not contain `TBD`.
-- [ ] Goal is explicit.
-- [ ] Scope is explicit.
-- [ ] Acceptance criteria exist.
-- [ ] If spec review is required, review metadata passes.
+- [x] `spec.md` exists.
+- [x] `spec.md` does not contain `TBD`.
+- [x] Goal is explicit.
+- [x] Scope is explicit.
+- [x] Acceptance criteria exist.
+- [x] If spec review is required, review metadata passes.
 
 #### plan gate
 
-- [ ] `plan.md` exists.
-- [ ] `plan.md` does not contain `TBD`.
-- [ ] Implementation approach exists.
-- [ ] Impact file list exists.
-- [ ] Risk analysis exists.
-- [ ] If plan review is required, review metadata passes.
+- [x] `plan.md` exists.
+- [x] `plan.md` does not contain `TBD`.
+- [x] Implementation approach exists.
+- [x] Impact file list exists.
+- [x] Risk analysis exists.
+- [x] If plan review is required, review metadata passes.
 
 #### tasks gate
 
-- [ ] `tasks.md` exists.
-- [ ] `tasks.md` does not contain `TBD`.
-- [ ] At least one executable task exists.
-- [ ] Each task has an owner or execution role.
-- [ ] If task review is required, review metadata passes.
+- [x] `tasks.md` exists.
+- [x] `tasks.md` does not contain `TBD`.
+- [x] At least one executable task exists.
+- [x] Each task has an owner or execution role.
+- [x] If task review is required, review metadata passes.
 
 #### implement gate
 
-- [ ] Required implementation result files exist.
-- [ ] Test file exists when tests are required.
-- [ ] Test result is not pending.
-- [ ] Test result is not only "not tested".
+- [x] Required implementation result files exist.
+- [x] Test file exists when tests are required.
+- [x] Test result is not pending.
+- [x] Test result is not only "not tested".
 
 #### review gate
 
-- [ ] Review file exists.
-- [ ] Review has a clear decision: `approved`, `rejected`, or `needs changes`.
-- [ ] Blocking issues prevent the gate from passing.
+- [x] Review file exists.
+- [x] Review has a clear decision: `approved`, `rejected`, or `needs changes`.
+- [x] Blocking issues prevent the gate from passing.
 
 #### archive gate
 
-- [ ] `archive.md` exists.
-- [ ] Final result is summarized.
-- [ ] Change summary exists.
-- [ ] Test summary exists.
-- [ ] Remaining issues are documented.
+- [x] `archive.md` exists.
+- [x] Final result is summarized.
+- [x] Change summary exists.
+- [x] Test summary exists.
+- [x] Remaining issues are documented.
 
 ## TODO 3: Harden Active Context
 

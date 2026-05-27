@@ -347,7 +347,16 @@ draft
 | `archive` | `archive.md`, dispatch record | fix 已通过，feature archive 完成 |
 | `done` | review/test/done summary records | archive 已通过，项目级 summary records 完成 |
 
-`gate` 负责进入下一阶段前的硬卡口，`verify` 负责判断某个阶段是否已经完成。Manager 和 subagent 应把 CLI 输出当作阶段状态的 source of truth，而不是依赖对话记忆。
+`check`、`gate` 和 `verify` 的职责分开：
+
+- `agentflow check FEATURE`：校验 feature bundle 的结构是否完整，配置要求的文件是否存在，以及是否还有明显占位符。
+- `agentflow gate STAGE FEATURE`：判断某个阶段 gate 是否通过，只输出 pass/block 和 blockers，不同步任务、不写 context、不触发 archive。
+- `agentflow feature verify FEATURE --stage STAGE`：保留为兼容的阶段完成度检查入口。
+- `agentflow feature advance/next`：显式推进流程，会在 gate 通过后同步任务、刷新 context 或写 records。
+
+旧的 `agentflow feature gate FEATURE --to STAGE` 和 `agentflow gate FEATURE --to STAGE`
+仍然保留兼容，但推荐新脚本使用 `agentflow gate STAGE FEATURE`。Manager 和
+subagent 应把 CLI 输出当作阶段状态的 source of truth，而不是依赖对话记忆。
 
 当前 `gates:` 使用全局 boolean 配置，例如：
 
@@ -412,7 +421,9 @@ Top Blockers:
 一个通过的 gate 会返回明确的通过信息：
 
 ```text
-Gate passed: FEATURE-001-user-auth can enter plan
+Gate Decision: pass
+Feature: FEATURE-001-user-auth
+Stage: spec
 ```
 
 `feature context` 会生成小型 JSON，供 Agent 在长任务前刷新工作视图：

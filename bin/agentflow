@@ -43,6 +43,7 @@ Advanced feature commands:
 Legacy aliases:
   bin/agentflow feature "Feature title"
   bin/agentflow check FEATURE-001-title
+  bin/agentflow gate spec|plan|tasks|implement|review|archive FEATURE-001-title
   bin/agentflow verify FEATURE-001-title --stage spec|plan|tasks|dispatch|implement|test|review|fix|archive|done
   bin/agentflow gate FEATURE-001-title --to plan|tasks|dispatch|implement|test|review|fix|archive
   bin/agentflow context FEATURE-001-title
@@ -270,15 +271,6 @@ mobile" |
         if (!seen[$0]++) print
       }
     '
-}
-
-side_is_enabled() {
-  local side="$1"
-  local enabled_side
-  while IFS= read -r enabled_side; do
-    [[ "$enabled_side" == "$side" ]] && return 0
-  done < <(implementation_target_sides)
-  return 1
 }
 
 required_feature_files() {
@@ -590,7 +582,7 @@ feature_path() {
 }
 
 check_feature() {
-  local dir path missing=0
+  local dir path missing=0 placeholders=0 placeholder_file
   dir="$(feature_path "$1")"
 
   while IFS= read -r path; do
@@ -600,13 +592,15 @@ check_feature() {
     fi
   done < <(required_feature_files)
 
-  if grep -R -n 'TBD' "$dir" >/tmp/agentflow-tbd.$$ 2>/dev/null; then
+  placeholder_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-tbd.XXXXXX")"
+  if grep -R -nE 'TBD|{{[A-Z0-9_]+}}' "$dir" >"$placeholder_file" 2>/dev/null; then
     printf 'Open placeholders:\n'
-    cat /tmp/agentflow-tbd.$$
+    cat "$placeholder_file"
+    placeholders=1
   fi
-  rm -f /tmp/agentflow-tbd.$$
+  rm -f "$placeholder_file"
 
-  if [[ "$missing" -eq 0 ]]; then
+  if [[ "$missing" -eq 0 && "$placeholders" -eq 0 ]]; then
     printf 'Feature bundle structure is complete: %s\n' "$dir"
   else
     exit 1
@@ -670,8 +664,57 @@ require_line_match() {
   local file="$1"
   local pattern="$2"
   local message="$3"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
   if ! grep -Eq "$pattern" "$file"; then
     add_verify_error "$message: $file"
+  fi
+}
+
+require_heading_with_content() {
+  local file="$1"
+  local heading="$2"
+  local message="$3"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  awk -v heading="$heading" '
+    $0 == heading {
+      in_section = 1
+      next
+    }
+    in_section && $0 ~ /^## / {
+      exit
+    }
+    in_section && $0 !~ /^[[:space:]]*$/ {
+      found = 1
+    }
+    END {
+      exit found ? 0 : 1
+    }
+  ' "$file" || add_verify_error "$message: $file"
+}
+
+require_review_decision() {
+  local file="$1"
+  local label="$2"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  if ! grep -Eiq '^Status:[[:space:]]*(approved|rejected|needs changes|complete|passed)' "$file"; then
+    add_verify_error "$label must have a final decision: approved, rejected, or needs changes: $file"
+  fi
+}
+
+require_no_blocking_issues() {
+  local file="$1"
+  local label="$2"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  if grep -Eiq 'blocking|blocker|must fix|rejected|needs changes' "$file"; then
+    add_verify_error "$label still records blocking issues: $file"
   fi
 }
 
@@ -682,6 +725,8 @@ verify_review_gate() {
   require_no_placeholders "$file" "$label"
   require_status_not_pending "$file" "$label"
   require_no_open_checkboxes "$file" "$label"
+  require_review_decision "$file" "$label"
+  require_no_blocking_issues "$file" "$label"
 }
 
 verify_stage_spec() {
@@ -691,6 +736,9 @@ verify_stage_spec() {
 
   require_file "$dir/spec.md" "spec.md" || return
   require_no_placeholders "$dir/spec.md" "spec.md"
+  require_heading_with_content "$dir/spec.md" "## User Goal" "spec.md is missing an explicit user goal"
+  require_heading_with_content "$dir/spec.md" "## Scope" "spec.md is missing explicit scope"
+  require_heading_with_content "$dir/spec.md" "## Acceptance Criteria" "spec.md is missing acceptance criteria"
 
   if [[ "$spec_review_required" == "true" ]]; then
     verify_review_gate "$dir/spec-review.md" "spec-review.md"
@@ -705,6 +753,9 @@ verify_stage_plan() {
   verify_stage_spec "$dir"
   require_file "$dir/plan.md" "plan.md" || return
   require_no_placeholders "$dir/plan.md" "plan.md"
+  require_heading_with_content "$dir/plan.md" "## Architecture" "plan.md is missing implementation approach"
+  require_heading_with_content "$dir/plan.md" "## Changed Files" "plan.md is missing impact file list"
+  require_heading_with_content "$dir/plan.md" "## Risks" "plan.md is missing risk analysis"
 
   if [[ "$plan_review_required" == "true" ]]; then
     verify_review_gate "$dir/plan-review.md" "plan-review.md"
@@ -719,7 +770,8 @@ verify_stage_tasks() {
   verify_stage_plan "$dir"
   require_file "$dir/tasks.md" "tasks.md" || return
   require_no_placeholders "$dir/tasks.md" "tasks.md"
-  require_line_match "$dir/tasks.md" '^- \[[ x]\] T[0-9]{3}' "tasks.md does not contain delivery tasks"
+  require_line_match "$dir/tasks.md" '^- \[[ x]\] T[0-9]{3}.+' "tasks.md does not contain executable delivery tasks"
+  require_line_match "$dir/tasks.md" 'T[0-9]{3}.*(Backend|Frontend|Mobile|API|Test|Review|Fix|Commit|Archive|Manager|Implementer|Agent|Designer)' "tasks.md tasks must include an owner or execution role"
 
   if [[ "$task_review_required" == "true" ]]; then
     verify_review_gate "$dir/task-review.md" "task-review.md"
@@ -803,6 +855,10 @@ verify_stage_test() {
 
   if [[ "$tests_required" == "true" ]]; then
     verify_structured_record "$dir/implementation/test.md" "implementation/test.md"
+    require_line_match "$dir/implementation/test.md" '^Status:[[:space:]]*(complete|passed)' "implementation/test.md must have a passed or complete result"
+    if grep -Eiq 'not tested|untested|not run' "$dir/implementation/test.md"; then
+      add_verify_error "implementation/test.md cannot be only not tested: $dir/implementation/test.md"
+    fi
   fi
 }
 
@@ -814,6 +870,8 @@ verify_stage_review() {
 
   if [[ "$review_required" == "true" ]]; then
     verify_structured_record "$dir/implementation/review.md" "implementation/review.md"
+    require_review_decision "$dir/implementation/review.md" "implementation/review.md"
+    require_no_blocking_issues "$dir/implementation/review.md" "implementation/review.md"
   fi
 }
 
@@ -837,6 +895,10 @@ verify_stage_archive() {
     require_no_placeholders "$dispatch_record" "dispatch record"
   fi
   verify_structured_record "$dir/archive.md" "archive.md"
+  require_heading_with_content "$dir/archive.md" "## Summary" "archive.md is missing final result summary"
+  require_heading_with_content "$dir/archive.md" "## Changed Files" "archive.md is missing change summary"
+  require_heading_with_content "$dir/archive.md" "## Verification" "archive.md is missing test summary"
+  require_heading_with_content "$dir/archive.md" "## Remaining Risks" "archive.md is missing remaining issues"
 }
 
 verify_stage_done() {
@@ -900,51 +962,63 @@ verify_feature() {
 }
 
 gate_to_stage() {
-  local dir target completed_stage
+  local dir target gate_stage
   dir="$(feature_path "$1")"
   target="$2"
   VERIFY_ERRORS=()
 
-  run_stage_hooks "before" "$target" "$(basename "$dir")" "$dir"
+  gate_stage="$(stage_for_next_gate_check "$target")"
+  if [[ -z "$gate_stage" ]]; then
+    printf 'Unsupported gate target: %s\n' "$target" >&2
+    exit 1
+  fi
+  run_verify_stage_checks "$dir" "$gate_stage"
 
-  case "$target" in
-    plan)
-      run_verify_stage_checks "$dir" "spec"
-      ;;
-    tasks)
-      run_verify_stage_checks "$dir" "plan"
-      ;;
-    dispatch)
-      run_verify_stage_checks "$dir" "tasks"
-      ;;
-    implement)
-      run_verify_stage_checks "$dir" "dispatch"
-      ;;
-    test)
-      run_verify_stage_checks "$dir" "implement"
-      ;;
-    review)
-      run_verify_stage_checks "$dir" "test"
-      ;;
-    fix)
-      run_verify_stage_checks "$dir" "review"
-      ;;
-    archive)
-      run_verify_stage_checks "$dir" "fix"
+  if [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'Gate Decision: pass\n'
+    printf 'Feature: %s\n' "$(basename "$dir")"
+    printf 'Target Stage: %s\n' "$target"
+    printf 'Checked Stage: %s\n' "$gate_stage"
+  else
+    printf 'Gate Decision: block\n' >&2
+    printf 'Feature: %s\n' "$(basename "$dir")" >&2
+    printf 'Target Stage: %s\n' "$target" >&2
+    printf 'Checked Stage: %s\n' "$gate_stage" >&2
+    printf 'Blockers:\n' >&2
+    local error
+    for error in "${VERIFY_ERRORS[@]}"; do
+      printf -- '- %s\n' "$error" >&2
+    done
+    exit 1
+  fi
+}
+
+gate_stage_status() {
+  local stage="$1"
+  local feature="$2"
+  local dir
+  dir="$(feature_path "$feature")"
+  VERIFY_ERRORS=()
+
+  case "$stage" in
+    spec|plan|tasks|dispatch|implement|test|review|fix|archive|done)
+      run_verify_stage_checks "$dir" "$stage"
       ;;
     *)
-      printf 'Unsupported gate target: %s\n' "$target" >&2
+      printf 'Unsupported gate stage: %s\n' "$stage" >&2
       exit 1
       ;;
   esac
 
   if [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
-    printf 'Gate passed for %s -> %s\n' "$(basename "$dir")" "$target"
-    completed_stage="$(completed_stage_for_gate_target "$target")"
-    run_stage_hooks "after" "$completed_stage" "$(basename "$dir")" "$dir"
+    printf 'Gate Decision: pass\n'
+    printf 'Feature: %s\n' "$(basename "$dir")"
+    printf 'Stage: %s\n' "$stage"
   else
-    printf 'Gate blocked for %s -> %s\n' "$(basename "$dir")" "$target" >&2
-    printf '\n' >&2
+    printf 'Gate Decision: block\n' >&2
+    printf 'Feature: %s\n' "$(basename "$dir")" >&2
+    printf 'Stage: %s\n' "$stage" >&2
+    printf 'Blockers:\n' >&2
     local error
     for error in "${VERIFY_ERRORS[@]}"; do
       printf -- '- %s\n' "$error" >&2
@@ -1222,10 +1296,15 @@ print_status() {
 advance_feature() {
   local feature="$1"
   local target="$2"
+  local dir completed_stage
+  dir="$(feature_path "$feature")"
 
+  run_stage_hooks "before" "$target" "$(basename "$dir")" "$dir"
   gate_to_stage "$feature" "$target"
+  completed_stage="$(completed_stage_for_gate_target "$target")"
+  run_stage_hooks "after" "$completed_stage" "$(basename "$dir")" "$dir"
   sync_tasks_for_feature "$feature"
-  build_active_context "$(feature_path "$feature")"
+  build_active_context "$dir"
   print_status "$feature"
 }
 
@@ -1239,7 +1318,6 @@ advance_feature_to_next_step() {
   case "$next_gate" in
     plan|tasks|dispatch|implement|test|review|fix|archive)
       if [[ "$next_gate" == "archive" ]]; then
-        gate_to_stage "$feature" "archive"
         archive_feature "$feature"
         sync_tasks_for_feature "$feature"
         build_active_context "$dir"
@@ -1367,14 +1445,17 @@ sync_tasks_for_feature() {
 }
 
 dispatch_feature() {
-  local dir title task_id record enforce_dispatch_gate
+  local dir title task_id record enforce_dispatch_gate completed_stage
   dir="$(feature_path "$1")"
   title="$(basename "$dir")"
   task_id="$(task_id_from_title "$title")"
   enforce_dispatch_gate="$(config_bool "runtime" "enforce_dispatch_gate" "true")"
 
   if [[ "$enforce_dispatch_gate" == "true" ]]; then
+    run_stage_hooks "before" "dispatch" "$title" "$dir"
     gate_to_stage "$title" "dispatch"
+    completed_stage="$(completed_stage_for_gate_target "dispatch")"
+    run_stage_hooks "after" "$completed_stage" "$title" "$dir"
   fi
 
   ensure_runtime_dirs
@@ -1387,7 +1468,7 @@ dispatch_feature() {
 }
 
 archive_feature() {
-  local dir title task_id line board enforce_archive_gate
+  local dir title task_id line board enforce_archive_gate completed_stage
   local review_record test_record done_record
   dir="$(feature_path "$1")"
   title="$(basename "$dir")"
@@ -1395,7 +1476,10 @@ archive_feature() {
   enforce_archive_gate="$(config_bool "runtime" "enforce_archive_gate" "true")"
 
   if [[ "$enforce_archive_gate" == "true" ]]; then
+    run_stage_hooks "before" "archive" "$title" "$dir"
     gate_to_stage "$title" "archive"
+    completed_stage="$(completed_stage_for_gate_target "archive")"
+    run_stage_hooks "after" "$completed_stage" "$title" "$dir"
   fi
 
   ensure_runtime_dirs
@@ -1445,8 +1529,14 @@ main() {
       verify_feature "$2" "$(parse_stage_flag "--stage" "${@:3}")"
       ;;
     gate)
-      if [[ $# -lt 4 ]]; then usage; exit 1; fi
-      gate_to_stage "$2" "$(parse_stage_flag "--to" "${@:3}")"
+      if [[ $# -ge 3 && "$3" == --to* ]]; then
+        gate_to_stage "$2" "$(parse_stage_flag "--to" "${@:3}")"
+      elif [[ $# -eq 3 ]]; then
+        gate_stage_status "$2" "$3"
+      else
+        usage
+        exit 1
+      fi
       ;;
     context)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi

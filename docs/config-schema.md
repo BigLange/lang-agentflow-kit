@@ -303,16 +303,22 @@ Stage checks are currently encoded by `bin/agentflow`:
 
 | Stage | Runtime Check |
 | --- | --- |
-| `spec` | `spec.md` exists, has no placeholders, and `spec-review.md` passes when required |
-| `plan` | `spec` passes, `plan.md` has no placeholders, and `plan-review.md` passes when required |
-| `tasks` | `plan` passes, `tasks.md` contains delivery tasks, and `task-review.md` passes when required |
+| `spec` | `spec.md` exists, has no placeholders, includes goal/scope/acceptance criteria, and `spec-review.md` passes when required |
+| `plan` | `spec` passes, `plan.md` has implementation approach, changed files, risk analysis, and `plan-review.md` passes when required |
+| `tasks` | `plan` passes, `tasks.md` contains executable tasks with owner/role signals, and `task-review.md` passes when required |
 | `dispatch` | `tasks` passes and `dispatch.md` has role assignment rows |
 | `implement` | `dispatch` passes and configured implementation result records are complete |
-| `test` | `implement` passes and `implementation/test.md` is complete when required |
-| `review` | `test` passes and `implementation/review.md` is complete when required |
+| `test` | `implement` passes and `implementation/test.md` is passed/complete when required |
+| `review` | `test` passes and `implementation/review.md` has a final non-blocking decision when required |
 | `fix` | `review` passes and `results/fix.md` is complete |
-| `archive` | `fix` passes, dispatch record policy passes, and `archive.md` is complete |
+| `archive` | `fix` passes, dispatch record policy passes, and `archive.md` has summary/change/test/risk sections complete |
 | `done` | `archive` passes and review/test/done summary records are complete when required |
+
+`agentflow check FEATURE` validates bundle structure and placeholders. It does
+not decide whether a stage may advance. `agentflow gate STAGE FEATURE` is the
+canonical no-mutation gate decision command and reports stable `Gate Decision`
+and `Blockers` output. Compatibility forms such as `agentflow feature gate
+FEATURE --to STAGE` remain available.
 
 For agents and scripts, CLI output is the source of truth for current feature
 state. Do not infer stage status from the task board alone.
@@ -335,7 +341,9 @@ Top Blockers:
 Passing gate example:
 
 ```text
-Gate passed: FEATURE-001-demo can enter plan
+Gate Decision: pass
+Feature: FEATURE-001-demo
+Stage: spec
 ```
 
 Generated context example:
