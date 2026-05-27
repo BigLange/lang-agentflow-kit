@@ -16,15 +16,38 @@ PROJECT_ROOT="$(pwd)"
 CONFIG="$PROJECT_ROOT/agentflow.config.yml"
 FEATURE_DIR="$PROJECT_ROOT/features"
 DOCS_DIR="$PROJECT_ROOT/project-docs"
+STATE_DIR="$PROJECT_ROOT/.agentflow/state"
+ACTIVE_CONTEXT_FILE="active_context.json"
 TEMPLATE_DIR="$PACKAGE_ROOT/agentflow/templates"
 PROFILE="standard"
+VERIFY_ERRORS=()
 
 usage() {
   cat <<'USAGE'
 Usage:
+  Daily workflow:
   bin/agentflow init [--profile lite|standard|full]
+  bin/agentflow feature create "Feature title"
+  bin/agentflow feature next FEATURE-001-title
+  bin/agentflow feature status FEATURE-001-title
+
+Advanced feature commands:
+  bin/agentflow feature verify FEATURE-001-title --stage spec|plan|tasks|dispatch|implement|test|review|fix|archive|done
+  bin/agentflow feature gate FEATURE-001-title --to plan|tasks|dispatch|implement|test|review|fix|archive
+  bin/agentflow feature advance FEATURE-001-title --to plan|tasks|dispatch|implement|test|review|fix|archive
+  bin/agentflow feature context FEATURE-001-title
+  bin/agentflow feature sync FEATURE-001-title
+  bin/agentflow feature dispatch FEATURE-001-title
+  bin/agentflow feature archive FEATURE-001-title
+
+Legacy aliases:
   bin/agentflow feature "Feature title"
   bin/agentflow check FEATURE-001-title
+  bin/agentflow verify FEATURE-001-title --stage spec|plan|tasks|dispatch|implement|test|review|fix|archive|done
+  bin/agentflow gate FEATURE-001-title --to plan|tasks|dispatch|implement|test|review|fix|archive
+  bin/agentflow context FEATURE-001-title
+  bin/agentflow status FEATURE-001-title
+  bin/agentflow sync-tasks FEATURE-001-title
   bin/agentflow dispatch FEATURE-001-title
   bin/agentflow archive FEATURE-001-title
 USAGE
@@ -68,10 +91,221 @@ parse_profile() {
   esac
 }
 
+parse_stage_flag() {
+  local flag_name="$1"
+  shift
+  local value=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      "$flag_name")
+        if [[ $# -lt 2 ]]; then
+          printf 'Missing value for %s\n' "$flag_name" >&2
+          exit 1
+        fi
+        value="$2"
+        shift 2
+        ;;
+      "$flag_name"=*)
+        value="${1#*=}"
+        shift
+        ;;
+      *)
+        printf 'Unknown option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$value" ]]; then
+    printf 'Missing required %s option\n' "$flag_name" >&2
+    exit 1
+  fi
+
+  printf '%s' "$value"
+}
+
 slugify() {
   printf '%s' "$1" |
     tr '[:upper:]' '[:lower:]' |
     sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
+}
+
+yaml_nested_value() {
+  local section="$1"
+  local key="$2"
+  local file="$3"
+  awk -v section="$section" -v key="$key" '
+    $0 ~ "^" section ":" {
+      in_section = 1
+      next
+    }
+    in_section && $0 ~ "^[^[:space:]]" {
+      in_section = 0
+    }
+    in_section {
+      line = $0
+      gsub(/^[[:space:]]+/, "", line)
+      if (line ~ "^" key ":") {
+        sub("^[^:]+:[[:space:]]*", "", line)
+        print line
+        exit
+      }
+    }
+  ' "$file"
+}
+
+yaml_list_under_section_key() {
+  local section="$1"
+  local key="$2"
+  local file="$3"
+  awk -v section="$section" -v key="$key" '
+    $0 ~ "^" section ":" {
+      in_section = 1
+      next
+    }
+    in_section && $0 ~ "^[^[:space:]]" {
+      if (in_key) {
+        exit
+      }
+      in_section = 0
+    }
+    in_section {
+      if ($0 ~ "^[[:space:]]{2}" key ":[[:space:]]*$") {
+        in_key = 1
+        next
+      }
+      if (in_key && $0 ~ "^[[:space:]]{2}[A-Za-z0-9_-]+:[[:space:]]*$") {
+        exit
+      }
+      if (in_key && $0 ~ "^[[:space:]]*-[[:space:]]") {
+        line = $0
+        sub("^[[:space:]]*-[[:space:]]*", "", line)
+        print line
+      }
+    }
+  ' "$file"
+}
+
+resolve_project_path() {
+  local raw_path="$1"
+  if [[ -z "$raw_path" ]]; then
+    return
+  fi
+  if [[ "$raw_path" == /* ]]; then
+    printf '%s' "$raw_path"
+  else
+    printf '%s/%s' "$PROJECT_ROOT" "$raw_path"
+  fi
+}
+
+load_project_paths() {
+  local feature_dir="features"
+  local docs_dir="project-docs"
+  local state_dir=".agentflow/state"
+  local active_context_file="active_context.json"
+
+  if [[ -f "$CONFIG" ]]; then
+    feature_dir="$(yaml_nested_value "project" "feature_dir" "$CONFIG" || true)"
+    docs_dir="$(yaml_nested_value "project" "docs_dir" "$CONFIG" || true)"
+    state_dir="$(yaml_nested_value "runtime" "state_dir" "$CONFIG" || true)"
+    active_context_file="$(yaml_nested_value "runtime" "active_context_file" "$CONFIG" || true)"
+  fi
+
+  FEATURE_DIR="$(resolve_project_path "${feature_dir:-features}")"
+  DOCS_DIR="$(resolve_project_path "${docs_dir:-project-docs}")"
+  STATE_DIR="$(resolve_project_path "${state_dir:-.agentflow/state}")"
+  ACTIVE_CONTEXT_FILE="${active_context_file:-active_context.json}"
+}
+
+config_bool() {
+  local section="$1"
+  local key="$2"
+  local default_value="$3"
+  local value="$default_value"
+  if [[ -f "$CONFIG" ]]; then
+    value="$(yaml_nested_value "$section" "$key" "$CONFIG" || true)"
+  fi
+  value="${value:-$default_value}"
+  case "$value" in
+    true|yes|1) printf 'true' ;;
+    false|no|0) printf 'false' ;;
+    *) printf '%s' "$default_value" ;;
+  esac
+}
+
+config_string() {
+  local section="$1"
+  local key="$2"
+  local default_value="$3"
+  local value="$default_value"
+  if [[ -f "$CONFIG" ]]; then
+    value="$(yaml_nested_value "$section" "$key" "$CONFIG" || true)"
+  fi
+  value="${value:-$default_value}"
+  printf '%s' "$value"
+}
+
+replace_runtime_tokens() {
+  local text="$1"
+  local feature_name="$2"
+  local feature_dir="$3"
+  local stage_name="$4"
+  text="${text//'{{FEATURE}}'/$feature_name}"
+  text="${text//'{{FEATURE_DIR}}'/$feature_dir}"
+  text="${text//'{{PROJECT_ROOT}}'/$PROJECT_ROOT}"
+  text="${text//'{{STAGE}}'/$stage_name}"
+  printf '%s' "$text"
+}
+
+completed_stage_for_gate_target() {
+  local target="$1"
+  case "$target" in
+    plan) printf 'spec' ;;
+    tasks) printf 'plan' ;;
+    dispatch) printf 'tasks' ;;
+    implement) printf 'dispatch' ;;
+    test) printf 'implement' ;;
+    review) printf 'test' ;;
+    fix) printf 'review' ;;
+    archive) printf 'fix' ;;
+    *) printf '' ;;
+  esac
+}
+
+run_stage_hooks() {
+  local hook_timing="$1"
+  local stage_name="$2"
+  local feature_name="$3"
+  local feature_dir="$4"
+  local hook_key command rendered_command failure_policy hook_failed=0
+
+  [[ -z "$stage_name" ]] && return
+  [[ ! -f "$CONFIG" ]] && return
+
+  hook_key="${hook_timing}_${stage_name}"
+  failure_policy="$(config_string "runtime" "hook_failure_policy" "stop")"
+  mkdir -p "$STATE_DIR"
+  while IFS= read -r command; do
+    [[ -z "$command" ]] && continue
+    rendered_command="$(replace_runtime_tokens "$command" "$feature_name" "$feature_dir" "$stage_name")"
+    printf 'Running hook %s: %s\n' "$hook_key" "$rendered_command"
+    if ! (
+      cd "$PROJECT_ROOT"
+      sh -lc "$rendered_command"
+    ); then
+      hook_failed=1
+      if [[ "$failure_policy" == "warn" ]]; then
+        printf 'Hook failed but continuing due to runtime.hook_failure_policy=warn: %s\n' "$hook_key" >&2
+      else
+        printf 'Hook failed: %s\n' "$hook_key" >&2
+        return 1
+      fi
+    fi
+  done < <(yaml_list_under_section_key "hooks" "$hook_key" "$CONFIG" || true)
+
+  if [[ "$hook_failed" -eq 1 && "$failure_policy" == "warn" ]]; then
+    return 0
+  fi
 }
 
 next_feature_id() {
@@ -133,17 +367,57 @@ render_vars() {
   ' "$src" > "$dest"
 }
 
-copy_if_missing() {
-  local src="$1"
-  local dest="$2"
-  if [[ ! -e "$dest" ]]; then
-    mkdir -p "$(dirname "$dest")"
-    cp -R "$src" "$dest"
+task_id_from_title() {
+  local title="$1"
+  printf '%s' "${title/FEATURE-/TASK-}"
+}
+
+dispatch_record_path() {
+  local task_id="$1"
+  printf '%s/records/dispatch/%s_subagent_dispatch.md' "$DOCS_DIR" "$task_id"
+}
+
+test_record_path() {
+  local task_id="$1"
+  printf '%s/records/test/%s_test.md' "$DOCS_DIR" "$task_id"
+}
+
+review_record_path() {
+  local task_id="$1"
+  printf '%s/records/review/%s_review.md' "$DOCS_DIR" "$task_id"
+}
+
+done_record_path() {
+  local task_id="$1"
+  printf '%s/records/done/%s_done.md' "$DOCS_DIR" "$task_id"
+}
+
+ensure_gitignore_line() {
+  local file="$1"
+  local line="$2"
+  touch "$file"
+  if ! grep -Fqx "$line" "$file" 2>/dev/null; then
+    printf '%s\n' "$line" >> "$file"
   fi
 }
 
+ensure_runtime_gitignore() {
+  local gitignore_file="$PROJECT_ROOT/.gitignore"
+  ensure_gitignore_line "$gitignore_file" ".agentflow/state/"
+  ensure_gitignore_line "$gitignore_file" "project-docs/records/dispatch/"
+  ensure_gitignore_line "$gitignore_file" ".DS_Store"
+}
+
 ensure_runtime_dirs() {
-  mkdir -p "$FEATURE_DIR" "$DOCS_DIR/records/dispatch" "$DOCS_DIR/records/done" "$DOCS_DIR/records/review" "$DOCS_DIR/records/test" "$DOCS_DIR/subagent"
+  load_project_paths
+  mkdir -p \
+    "$FEATURE_DIR" \
+    "$DOCS_DIR/records/dispatch" \
+    "$DOCS_DIR/records/done" \
+    "$DOCS_DIR/records/review" \
+    "$DOCS_DIR/records/test" \
+    "$DOCS_DIR/subagent" \
+    "$STATE_DIR"
 
   if [[ ! -f "$DOCS_DIR/00_PROJECT_CONTEXT.md" ]]; then
     cp "$TEMPLATE_DIR/project-docs/00_PROJECT_CONTEXT.md" "$DOCS_DIR/00_PROJECT_CONTEXT.md"
@@ -165,13 +439,22 @@ ensure_runtime_dirs() {
 init_project() {
   local profile="${1:-standard}"
   ensure_runtime_dirs
-  mkdir -p "$PROJECT_ROOT/.agentflow/agents" "$PROJECT_ROOT/.agentflow/workflows" "$PROJECT_ROOT/.agentflow/templates" "$PROJECT_ROOT/.agentflow/integrations" "$PROJECT_ROOT/.agentflow/records"
+  ensure_runtime_gitignore
+  mkdir -p \
+    "$PROJECT_ROOT/.agentflow/agents" \
+    "$PROJECT_ROOT/.agentflow/workflows" \
+    "$PROJECT_ROOT/.agentflow/templates" \
+    "$PROJECT_ROOT/.agentflow/integrations" \
+    "$PROJECT_ROOT/.agentflow/records" \
+    "$STATE_DIR"
 
   if [[ ! -f "$PROJECT_ROOT/AGENTS.md" ]]; then
     cp "$TEMPLATE_DIR/project/AGENTS.md" "$PROJECT_ROOT/AGENTS.md"
   fi
 
   cp "$TEMPLATE_DIR/config/$profile.yml" "$CONFIG"
+  load_project_paths
+  mkdir -p "$STATE_DIR"
   cp -R "$PACKAGE_ROOT/agentflow/roles/." "$PROJECT_ROOT/.agentflow/agents/"
   cp -R "$PACKAGE_ROOT/agentflow/templates/feature/." "$PROJECT_ROOT/.agentflow/templates/"
   cp -R "$PACKAGE_ROOT/agentflow/templates/records/." "$PROJECT_ROOT/.agentflow/templates/"
@@ -191,6 +474,7 @@ init_project() {
 create_feature() {
   local request="$1"
   local id slug name dir
+  load_project_paths
   id="$(next_feature_id)"
   slug="$(slugify "$request")"
   if [[ -z "$slug" ]]; then
@@ -213,6 +497,7 @@ create_feature() {
   render_template "$TEMPLATE_DIR/feature/implementation-backend.md" "$dir/results/backend.md" "$request"
   render_template "$TEMPLATE_DIR/feature/implementation-frontend.md" "$dir/results/frontend.md" "$request"
   render_template "$TEMPLATE_DIR/feature/implementation-mobile.md" "$dir/results/mobile.md" "$request"
+  render_template "$TEMPLATE_DIR/feature/implementation-fix.md" "$dir/results/fix.md" "$request"
   render_template "$TEMPLATE_DIR/feature/implementation-test.md" "$dir/implementation/test.md" "$request"
   render_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request"
 
@@ -221,6 +506,7 @@ create_feature() {
 
 feature_path() {
   local feature="$1"
+  load_project_paths
   if [[ -d "$feature" ]]; then
     printf '%s' "$feature"
   elif [[ -d "$FEATURE_DIR/$feature" ]]; then
@@ -255,14 +541,745 @@ check_feature() {
   fi
 }
 
-dispatch_feature() {
-  local dir title task_id record
+add_verify_error() {
+  VERIFY_ERRORS+=("$1")
+}
+
+require_file() {
+  local file="$1"
+  local label="$2"
+  if [[ ! -f "$file" ]]; then
+    add_verify_error "$label is missing: $file"
+    return 1
+  fi
+  return 0
+}
+
+require_no_placeholders() {
+  local file="$1"
+  local label="$2"
+  local matches
+  matches="$(grep -nE 'TBD|{{[A-Z0-9_]+}}' "$file" || true)"
+  if [[ -n "$matches" ]]; then
+    add_verify_error "$label still contains placeholders:
+$matches"
+  fi
+}
+
+require_no_open_checkboxes() {
+  local file="$1"
+  local label="$2"
+  local matches
+  matches="$(grep -nE '^- \[ \]' "$file" || true)"
+  if [[ -n "$matches" ]]; then
+    add_verify_error "$label still has unchecked gate items:
+$matches"
+  fi
+}
+
+require_status_not_pending() {
+  local file="$1"
+  local label="$2"
+  if grep -Eq '^Status:[[:space:]]*pending' "$file"; then
+    add_verify_error "$label status is still pending: $file"
+  fi
+}
+
+verify_structured_record() {
+  local file="$1"
+  local label="$2"
+  require_file "$file" "$label" || return
+  require_no_placeholders "$file" "$label"
+  require_status_not_pending "$file" "$label"
+  require_no_open_checkboxes "$file" "$label"
+}
+
+require_line_match() {
+  local file="$1"
+  local pattern="$2"
+  local message="$3"
+  if ! grep -Eq "$pattern" "$file"; then
+    add_verify_error "$message: $file"
+  fi
+}
+
+verify_review_gate() {
+  local file="$1"
+  local label="$2"
+  require_file "$file" "$label" || return
+  require_no_placeholders "$file" "$label"
+  require_status_not_pending "$file" "$label"
+  require_no_open_checkboxes "$file" "$label"
+}
+
+verify_stage_spec() {
+  local dir="$1"
+  local spec_review_required
+  spec_review_required="$(config_bool "gates" "require_spec_review" "true")"
+
+  require_file "$dir/spec.md" "spec.md" || return
+  require_no_placeholders "$dir/spec.md" "spec.md"
+
+  if [[ "$spec_review_required" == "true" ]]; then
+    verify_review_gate "$dir/spec-review.md" "spec-review.md"
+  fi
+}
+
+verify_stage_plan() {
+  local dir="$1"
+  local plan_review_required
+  plan_review_required="$(config_bool "gates" "require_plan_review" "true")"
+
+  verify_stage_spec "$dir"
+  require_file "$dir/plan.md" "plan.md" || return
+  require_no_placeholders "$dir/plan.md" "plan.md"
+
+  if [[ "$plan_review_required" == "true" ]]; then
+    verify_review_gate "$dir/plan-review.md" "plan-review.md"
+  fi
+}
+
+verify_stage_tasks() {
+  local dir="$1"
+  local task_review_required
+  task_review_required="$(config_bool "gates" "require_task_review" "true")"
+
+  verify_stage_plan "$dir"
+  require_file "$dir/tasks.md" "tasks.md" || return
+  require_no_placeholders "$dir/tasks.md" "tasks.md"
+  require_line_match "$dir/tasks.md" '^- \[[ x]\] T[0-9]{3}' "tasks.md does not contain delivery tasks"
+
+  if [[ "$task_review_required" == "true" ]]; then
+    verify_review_gate "$dir/task-review.md" "task-review.md"
+  fi
+}
+
+verify_stage_dispatch() {
+  local dir="$1"
+  verify_stage_tasks "$dir"
+  require_file "$dir/dispatch.md" "dispatch.md" || return
+  require_no_placeholders "$dir/dispatch.md" "dispatch.md"
+  require_line_match "$dir/dispatch.md" '^\| Task \| Role \| Inputs \| Outputs \| Status \|' "dispatch.md is missing role assignment table"
+  require_line_match "$dir/dispatch.md" '^\| API design \|' "dispatch.md is missing default dispatch rows"
+}
+
+verify_stage_implement() {
+  local dir="$1"
+  local result_file found_result=0
+  verify_stage_dispatch "$dir"
+
+  verify_structured_record "$dir/implementation/api.md" "implementation/api.md"
+
+  for result_file in "$dir/results/backend.md" "$dir/results/frontend.md" "$dir/results/mobile.md"; do
+    if [[ -f "$result_file" ]]; then
+      found_result=1
+      verify_structured_record "$result_file" "$(basename "$result_file")"
+    fi
+  done
+
+  if [[ "$found_result" -eq 0 ]]; then
+    add_verify_error "implementation results are missing under $dir/results/"
+  fi
+}
+
+verify_stage_test() {
+  local dir="$1"
+  local tests_required
+  tests_required="$(config_bool "gates" "require_tests_before_done" "true")"
+  verify_stage_implement "$dir"
+
+  if [[ "$tests_required" == "true" ]]; then
+    verify_structured_record "$dir/implementation/test.md" "implementation/test.md"
+  fi
+}
+
+verify_stage_review() {
+  local dir="$1"
+  local review_required
+  review_required="$(config_bool "gates" "require_review_before_commit" "true")"
+  verify_stage_test "$dir"
+
+  if [[ "$review_required" == "true" ]]; then
+    verify_structured_record "$dir/implementation/review.md" "implementation/review.md"
+  fi
+}
+
+verify_stage_fix() {
+  local dir="$1"
+  verify_stage_review "$dir"
+  verify_structured_record "$dir/results/fix.md" "results/fix.md"
+}
+
+verify_stage_archive() {
+  local dir="$1"
+  local title task_id dispatch_record dispatch_record_required
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  dispatch_record="$(dispatch_record_path "$task_id")"
+  dispatch_record_required="$(config_bool "gates" "require_dispatch_record_for_archive" "true")"
+  verify_stage_fix "$dir"
+  if [[ "$dispatch_record_required" == "true" ]]; then
+    verify_structured_record "$dispatch_record" "dispatch record"
+  elif [[ -f "$dispatch_record" ]]; then
+    require_no_placeholders "$dispatch_record" "dispatch record"
+  fi
+  verify_structured_record "$dir/archive.md" "archive.md"
+}
+
+verify_stage_done() {
+  local dir="$1"
+  local title task_id review_record test_record done_record summary_required
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  review_record="$(review_record_path "$task_id")"
+  test_record="$(test_record_path "$task_id")"
+  done_record="$(done_record_path "$task_id")"
+  summary_required="$(config_bool "gates" "require_summary_records_for_done" "true")"
+
+  verify_stage_archive "$dir"
+
+  if [[ "$summary_required" == "true" ]]; then
+    verify_structured_record "$review_record" "review record"
+    verify_structured_record "$test_record" "test record"
+    verify_structured_record "$done_record" "done record"
+  fi
+}
+
+run_verify_stage_checks() {
+  local dir="$1"
+  local stage="$2"
+  VERIFY_ERRORS=()
+  case "$stage" in
+    spec) verify_stage_spec "$dir" ;;
+    plan) verify_stage_plan "$dir" ;;
+    tasks) verify_stage_tasks "$dir" ;;
+    dispatch) verify_stage_dispatch "$dir" ;;
+    implement) verify_stage_implement "$dir" ;;
+    test) verify_stage_test "$dir" ;;
+    review) verify_stage_review "$dir" ;;
+    fix) verify_stage_fix "$dir" ;;
+    archive) verify_stage_archive "$dir" ;;
+    done) verify_stage_done "$dir" ;;
+    *)
+      printf 'Unsupported verify stage: %s\n' "$stage" >&2
+      exit 1
+      ;;
+  esac
+}
+
+verify_feature() {
+  local dir stage
+  dir="$(feature_path "$1")"
+  stage="$2"
+  run_verify_stage_checks "$dir" "$stage"
+
+  if [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'Verify passed for %s at stage %s\n' "$(basename "$dir")" "$stage"
+  else
+    printf 'Verify failed for %s at stage %s\n' "$(basename "$dir")" "$stage" >&2
+    printf '\n' >&2
+    local error
+    for error in "${VERIFY_ERRORS[@]}"; do
+      printf -- '- %s\n' "$error" >&2
+    done
+    exit 1
+  fi
+}
+
+gate_to_stage() {
+  local dir target completed_stage
+  dir="$(feature_path "$1")"
+  target="$2"
+  VERIFY_ERRORS=()
+
+  run_stage_hooks "before" "$target" "$(basename "$dir")" "$dir"
+
+  case "$target" in
+    plan)
+      run_verify_stage_checks "$dir" "spec"
+      ;;
+    tasks)
+      run_verify_stage_checks "$dir" "plan"
+      ;;
+    dispatch)
+      run_verify_stage_checks "$dir" "tasks"
+      ;;
+    implement)
+      run_verify_stage_checks "$dir" "dispatch"
+      ;;
+    test)
+      run_verify_stage_checks "$dir" "implement"
+      ;;
+    review)
+      run_verify_stage_checks "$dir" "test"
+      ;;
+    fix)
+      run_verify_stage_checks "$dir" "review"
+      ;;
+    archive)
+      run_verify_stage_checks "$dir" "fix"
+      ;;
+    *)
+      printf 'Unsupported gate target: %s\n' "$target" >&2
+      exit 1
+      ;;
+  esac
+
+  if [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'Gate passed for %s -> %s\n' "$(basename "$dir")" "$target"
+    completed_stage="$(completed_stage_for_gate_target "$target")"
+    run_stage_hooks "after" "$completed_stage" "$(basename "$dir")" "$dir"
+  else
+    printf 'Gate blocked for %s -> %s\n' "$(basename "$dir")" "$target" >&2
+    printf '\n' >&2
+    local error
+    for error in "${VERIFY_ERRORS[@]}"; do
+      printf -- '- %s\n' "$error" >&2
+    done
+    exit 1
+  fi
+}
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+infer_feature_stage() {
+  local dir="$1"
+
+  if run_verify_stage_checks "$dir" "done" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'done'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "archive" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'archive'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "fix" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'fix'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "review" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'review'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "test" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'test'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "implement" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'implement'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "dispatch" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'dispatch'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "tasks" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'tasks'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "plan" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'plan'
+    return
+  fi
+
+  if run_verify_stage_checks "$dir" "spec" && [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+    printf 'spec'
+    return
+  fi
+
+  printf 'draft'
+}
+
+next_gate_for_stage() {
+  local stage="$1"
+  case "$stage" in
+    draft|spec) printf 'plan' ;;
+    plan) printf 'tasks' ;;
+    tasks) printf 'dispatch' ;;
+    dispatch) printf 'implement' ;;
+    implement) printf 'test' ;;
+    test) printf 'review' ;;
+    review) printf 'fix' ;;
+    fix) printf 'archive' ;;
+    archive) printf 'done' ;;
+    done) printf 'complete' ;;
+    *) printf 'plan' ;;
+  esac
+}
+
+stage_progress_percent() {
+  local stage="$1"
+  case "$stage" in
+    draft) printf '0' ;;
+    spec) printf '15' ;;
+    plan) printf '30' ;;
+    tasks) printf '45' ;;
+    dispatch) printf '55' ;;
+    implement) printf '70' ;;
+    test) printf '80' ;;
+    review) printf '88' ;;
+    fix) printf '94' ;;
+    archive) printf '100' ;;
+    done) printf '100' ;;
+    *) printf '0' ;;
+  esac
+}
+
+task_should_be_checked() {
+  local task_id="$1"
+  local stage="$2"
+  case "$task_id" in
+    T001)
+      [[ "$stage" =~ ^(implement|test|review|fix|archive|done)$ ]] && printf 'true' || printf 'false'
+      ;;
+    T002|T003|T004)
+      [[ "$stage" =~ ^(implement|test|review|fix|archive|done)$ ]] && printf 'true' || printf 'false'
+      ;;
+    T005)
+      [[ "$stage" =~ ^(test|review|fix|archive|done)$ ]] && printf 'true' || printf 'false'
+      ;;
+    T006)
+      [[ "$stage" =~ ^(review|fix|archive|done)$ ]] && printf 'true' || printf 'false'
+      ;;
+    T007)
+      [[ "$stage" =~ ^(fix|archive|done)$ ]] && printf 'true' || printf 'false'
+      ;;
+    T008|T009)
+      [[ "$stage" =~ ^(archive|done)$ ]] && printf 'true' || printf 'false'
+      ;;
+    *)
+      printf 'false'
+      ;;
+  esac
+}
+
+emit_json_array_from_lines() {
+  local lines="$1"
+  local prefix="$2"
+  local first=1
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$first" -eq 0 ]]; then
+      printf ',\n'
+    fi
+    printf '%s"%s"' "$prefix" "$(json_escape "$line")"
+    first=0
+  done <<< "$lines"
+}
+
+build_active_context() {
+  local dir="$1"
+  local feature_name current_stage next_gate output_file open_tasks key_files
+  feature_name="$(basename "$dir")"
+  current_stage="$(infer_feature_stage "$dir")"
+  next_gate="$(next_gate_for_stage "$current_stage")"
+  ensure_runtime_dirs
+  output_file="$STATE_DIR/$ACTIVE_CONTEXT_FILE"
+
+  open_tasks="$(grep -E '^- \[ \] T[0-9]{3}' "$dir/tasks.md" 2>/dev/null || true)"
+  key_files="$(printf '%s\n' \
+    "$dir/spec.md" \
+    "$dir/plan.md" \
+    "$dir/tasks.md" \
+    "$dir/dispatch.md" \
+    "$dir/results/backend.md" \
+    "$dir/results/frontend.md" \
+    "$dir/results/mobile.md" \
+    "$dir/implementation/test.md" \
+    "$dir/implementation/review.md" \
+    "$dir/results/fix.md" \
+    "$dir/archive.md" \
+    "$(review_record_path "$(task_id_from_title "$feature_name")")" \
+    "$(test_record_path "$(task_id_from_title "$feature_name")")" \
+    "$(done_record_path "$(task_id_from_title "$feature_name")")")"
+
+  cat > "$output_file" <<JSON
+{
+  "feature": "$(json_escape "$feature_name")",
+  "feature_dir": "$(json_escape "$dir")",
+  "current_stage": "$(json_escape "$current_stage")",
+  "next_gate": "$(json_escape "$next_gate")",
+  "open_tasks": [
+$(emit_json_array_from_lines "$open_tasks" "    ")
+  ],
+  "key_files": [
+$(emit_json_array_from_lines "$key_files" "    ")
+  ]
+}
+JSON
+
+  printf 'Wrote active context: %s\n' "$output_file"
+}
+
+record_status_label() {
+  local path="$1"
+  if [[ -f "$path" ]]; then
+    printf 'present'
+  else
+    printf 'missing'
+  fi
+}
+
+stage_for_next_gate_check() {
+  local gate_target="$1"
+  case "$gate_target" in
+    plan) printf 'spec' ;;
+    tasks) printf 'plan' ;;
+    dispatch) printf 'tasks' ;;
+    implement) printf 'dispatch' ;;
+    test) printf 'implement' ;;
+    review) printf 'test' ;;
+    fix) printf 'review' ;;
+    archive) printf 'fix' ;;
+    done) printf 'archive' ;;
+    complete) printf 'done' ;;
+    *) printf '' ;;
+  esac
+}
+
+print_status() {
+  local dir title task_id current_stage next_gate check_stage
+  local dispatch_record review_record test_record done_record
+  local open_tasks open_task_count total_task_count checked_task_count progress_percent
+  local effective_open_tasks checklist_note
   dir="$(feature_path "$1")"
   title="$(basename "$dir")"
-  task_id="${title/FEATURE-/TASK-}"
+  task_id="$(task_id_from_title "$title")"
+  current_stage="$(infer_feature_stage "$dir")"
+  next_gate="$(next_gate_for_stage "$current_stage")"
+  check_stage="$(stage_for_next_gate_check "$next_gate")"
+  dispatch_record="$(dispatch_record_path "$task_id")"
+  review_record="$(review_record_path "$task_id")"
+  test_record="$(test_record_path "$task_id")"
+  done_record="$(done_record_path "$task_id")"
+  open_tasks="$(grep -E '^- \[ \] T[0-9]{3}' "$dir/tasks.md" 2>/dev/null || true)"
+  open_task_count="$(printf '%s\n' "$open_tasks" | sed '/^$/d' | wc -l | tr -d ' ')"
+  total_task_count="$(grep -Ec '^- \[[ x]\] T[0-9]{3}' "$dir/tasks.md" 2>/dev/null || true)"
+  checked_task_count="$(grep -Ec '^- \[x\] T[0-9]{3}' "$dir/tasks.md" 2>/dev/null || true)"
+  progress_percent="$(stage_progress_percent "$current_stage")"
+  effective_open_tasks="${open_task_count:-0}"
+  checklist_note=""
+
+  if [[ "$current_stage" =~ ^(archive|done)$ ]]; then
+    effective_open_tasks="0"
+    if [[ "${open_task_count:-0}" != "0" ]]; then
+      checklist_note="task checklist appears stale relative to runtime stage"
+    fi
+  elif [[ "$current_stage" =~ ^(implement|test|review|fix)$ ]] && [[ "${open_task_count:-0}" != "0" ]]; then
+    checklist_note="task checklist may lag behind runtime progress"
+  fi
+
+  printf 'Feature: %s\n' "$title"
+  printf 'Current Stage: %s\n' "$current_stage"
+  printf 'Next Gate: %s\n' "$next_gate"
+  printf 'Progress: %s%%\n' "$progress_percent"
+  printf 'Open Tasks: %s\n' "$effective_open_tasks"
+  printf 'Task Checklist: %s/%s checked\n' "${checked_task_count:-0}" "${total_task_count:-0}"
+  if [[ -n "$checklist_note" ]]; then
+    printf 'Checklist Note: %s\n' "$checklist_note"
+  fi
+  printf '\n'
+  printf 'Records:\n'
+  printf '  dispatch: %s\n' "$(record_status_label "$dispatch_record")"
+  printf '  test: %s\n' "$(record_status_label "$test_record")"
+  printf '  review: %s\n' "$(record_status_label "$review_record")"
+  printf '  done: %s\n' "$(record_status_label "$done_record")"
+  printf '\n'
+
+  if [[ "$next_gate" == "complete" ]]; then
+    printf 'Gate Status: complete\n'
+    return
+  fi
+
+  if [[ -n "$check_stage" ]]; then
+    run_verify_stage_checks "$dir" "$check_stage"
+    if [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
+      printf 'Gate Status: ready for %s\n' "$next_gate"
+    else
+      printf 'Gate Status: blocked before %s\n' "$next_gate"
+      printf 'Top Blockers:\n'
+      local blocker limit=0
+      for blocker in "${VERIFY_ERRORS[@]}"; do
+        printf -- '  - %s\n' "$blocker"
+        limit=$((limit + 1))
+        if [[ "$limit" -ge 5 ]]; then
+          break
+        fi
+      done
+    fi
+  fi
+}
+
+advance_feature() {
+  local feature="$1"
+  local target="$2"
+
+  gate_to_stage "$feature" "$target"
+  sync_tasks_for_feature "$feature"
+  build_active_context "$(feature_path "$feature")"
+  print_status "$feature"
+}
+
+advance_feature_to_next_step() {
+  local dir current_stage next_gate feature
+  feature="$1"
+  dir="$(feature_path "$feature")"
+  current_stage="$(infer_feature_stage "$dir")"
+  next_gate="$(next_gate_for_stage "$current_stage")"
+
+  case "$next_gate" in
+    plan|tasks|dispatch|implement|test|review|fix|archive)
+      if [[ "$next_gate" == "archive" ]]; then
+        gate_to_stage "$feature" "archive"
+        archive_feature "$feature"
+        sync_tasks_for_feature "$feature"
+        build_active_context "$dir"
+        print_status "$feature"
+      else
+        advance_feature "$feature" "$next_gate"
+      fi
+      ;;
+    done)
+      archive_feature "$feature"
+      sync_tasks_for_feature "$feature"
+      build_active_context "$dir"
+      print_status "$feature"
+      ;;
+    complete)
+      print_status "$feature"
+      ;;
+    *)
+      printf 'Unable to determine next step for %s\n' "$feature" >&2
+      exit 1
+      ;;
+  esac
+}
+
+handle_feature_command() {
+  local subcommand="${1:-}"
+  shift || true
+
+  case "$subcommand" in
+    create)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      create_feature "$1"
+      ;;
+    next)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      advance_feature_to_next_step "$1"
+      ;;
+    verify)
+      if [[ $# -lt 3 ]]; then usage; exit 1; fi
+      verify_feature "$1" "$(parse_stage_flag "--stage" "${@:2}")"
+      ;;
+    gate)
+      if [[ $# -lt 3 ]]; then usage; exit 1; fi
+      gate_to_stage "$1" "$(parse_stage_flag "--to" "${@:2}")"
+      ;;
+    advance)
+      if [[ $# -lt 3 ]]; then usage; exit 1; fi
+      advance_feature "$1" "$(parse_stage_flag "--to" "${@:2}")"
+      ;;
+    context)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      build_active_context "$(feature_path "$1")"
+      ;;
+    status)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      print_status "$1"
+      ;;
+    sync)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      sync_tasks_for_feature "$1"
+      ;;
+    dispatch)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      dispatch_feature "$1"
+      ;;
+    archive)
+      if [[ $# -lt 1 ]]; then usage; exit 1; fi
+      archive_feature "$1"
+      ;;
+    "")
+      usage
+      exit 1
+      ;;
+    *)
+      # Backward-compatible shorthand: `agentflow feature "title"`
+      create_feature "$subcommand"
+      ;;
+  esac
+}
+
+sync_tasks_for_feature() {
+  local dir tasks_file current_stage tmp_file changes=0
+  dir="$(feature_path "$1")"
+  tasks_file="$dir/tasks.md"
+  current_stage="$(infer_feature_stage "$dir")"
+
+  if [[ ! -f "$tasks_file" ]]; then
+    printf 'Missing tasks file: %s\n' "$tasks_file" >&2
+    exit 1
+  fi
+
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-tasks-sync.XXXXXX")"
+  awk -v stage="$current_stage" '
+    function should_check(task_id, stage_name) {
+      if (task_id == "T001") return stage_name ~ /^(implement|test|review|fix|archive|done)$/
+      if (task_id == "T002" || task_id == "T003" || task_id == "T004") return stage_name ~ /^(implement|test|review|fix|archive|done)$/
+      if (task_id == "T005") return stage_name ~ /^(test|review|fix|archive|done)$/
+      if (task_id == "T006") return stage_name ~ /^(review|fix|archive|done)$/
+      if (task_id == "T007") return stage_name ~ /^(fix|archive|done)$/
+      if (task_id == "T008" || task_id == "T009") return stage_name ~ /^(archive|done)$/
+      return 0
+    }
+    {
+      if ($0 ~ /^- \[[ x]\] T00[1-9] /) {
+        task_id = substr($0, 7, 4)
+        desired = should_check(task_id, stage) ? "x" : " "
+        sub(/^- \[[ x]\]/, "- [" desired "]", $0)
+      }
+      print
+    }
+  ' "$tasks_file" > "$tmp_file"
+
+  if ! cmp -s "$tasks_file" "$tmp_file"; then
+    mv "$tmp_file" "$tasks_file"
+    changes=1
+  else
+    rm -f "$tmp_file"
+  fi
+
+  if [[ "$changes" -eq 1 ]]; then
+    printf 'Synced standard task checklist for %s at stage %s\n' "$(basename "$dir")" "$current_stage"
+  else
+    printf 'Task checklist already aligned for %s at stage %s\n' "$(basename "$dir")" "$current_stage"
+  fi
+}
+
+dispatch_feature() {
+  local dir title task_id record enforce_dispatch_gate
+  dir="$(feature_path "$1")"
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  enforce_dispatch_gate="$(config_bool "runtime" "enforce_dispatch_gate" "true")"
+
+  if [[ "$enforce_dispatch_gate" == "true" ]]; then
+    gate_to_stage "$title" "dispatch"
+  fi
 
   ensure_runtime_dirs
-  record="$DOCS_DIR/records/dispatch/${task_id}_subagent_dispatch.md"
+  record="$(dispatch_record_path "$task_id")"
 
   render_vars "$TEMPLATE_DIR/records/dispatch-record.md" "$record" "$task_id" "Implementation Team" "Implement $title from Feature Bundle" "$dir"
 
@@ -271,17 +1288,36 @@ dispatch_feature() {
 }
 
 archive_feature() {
-  local dir title line board
+  local dir title task_id line board enforce_archive_gate
+  local review_record test_record done_record
   dir="$(feature_path "$1")"
   title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  enforce_archive_gate="$(config_bool "runtime" "enforce_archive_gate" "true")"
+
+  if [[ "$enforce_archive_gate" == "true" ]]; then
+    gate_to_stage "$title" "archive"
+  fi
+
   ensure_runtime_dirs
   board="$DOCS_DIR/03_TASK_BOARD.md"
+  review_record="$(review_record_path "$task_id")"
+  test_record="$(test_record_path "$task_id")"
+  done_record="$(done_record_path "$task_id")"
   line="| $title | $title | archive | subagent | Manager | pending | no | See $dir/archive.md |"
+
+  render_vars "$TEMPLATE_DIR/records/review-record.md" "$review_record" "$task_id" "Code Reviewer" "Summarize review outcome for $title" "$dir"
+  render_vars "$TEMPLATE_DIR/records/test-record.md" "$test_record" "$task_id" "Test Agent" "Summarize test outcome for $title" "$dir"
+  render_vars "$TEMPLATE_DIR/records/done-record.md" "$done_record" "$task_id" "Commit Agent" "Finalize archive and delivery summary for $title" "$dir"
 
   if ! grep -F "$title" "$board" >/dev/null 2>&1; then
     printf '%s\n' "$line" >> "$board"
   fi
 
+  printf 'Wrote summary records:\n'
+  printf '  %s\n' "$review_record"
+  printf '  %s\n' "$test_record"
+  printf '  %s\n' "$done_record"
   printf 'Archive linked in task board: %s\n' "$board"
 }
 
@@ -298,12 +1334,32 @@ main() {
       init_project "$PROFILE"
       ;;
     feature)
-      if [[ $# -lt 2 ]]; then usage; exit 1; fi
-      create_feature "$2"
+      shift
+      handle_feature_command "$@"
       ;;
     check)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi
       check_feature "$2"
+      ;;
+    verify)
+      if [[ $# -lt 4 ]]; then usage; exit 1; fi
+      verify_feature "$2" "$(parse_stage_flag "--stage" "${@:3}")"
+      ;;
+    gate)
+      if [[ $# -lt 4 ]]; then usage; exit 1; fi
+      gate_to_stage "$2" "$(parse_stage_flag "--to" "${@:3}")"
+      ;;
+    context)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      build_active_context "$(feature_path "$2")"
+      ;;
+    status)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      print_status "$2"
+      ;;
+    sync-tasks)
+      if [[ $# -lt 2 ]]; then usage; exit 1; fi
+      sync_tasks_for_feature "$2"
       ;;
     dispatch)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi

@@ -1,23 +1,35 @@
 # Done Record: {{TASK_ID}}
 
-- from: {{ROLE}}
-- to: Manager
-- task: {{TASK_ID}}
-- summary: {{SUMMARY}}
-- status: done
+## Status
+
+Status: done
+
+## Routing
+
+- From: {{ROLE}}
+- To: Manager
+- Task: {{TASK_ID}}
+- Summary: {{SUMMARY}}
 
 ## Changed Files
 
-- TBD
+- See the linked feature bundle outputs and final diff for the concrete file list.
 
 ## Verification
 
-- TBD
+- See feature bundle verification sections and linked test/review records.
+- Final archive: `{{FEATURE_DIR}}/archive.md`
 
 ## Review / Test Notes
 
-- TBD
+- See `project-docs/records/review/` and `project-docs/records/test/` for summarized results.
 
 ## Risks / Follow-Up
 
-- TBD
+- See the archive and fix result for remaining risks and follow-up actions.
+
+## Completion Checklist
+
+- [x] Delivery summary is recorded
+- [x] Verification references are recorded
+- [x] Review and test references are recorded

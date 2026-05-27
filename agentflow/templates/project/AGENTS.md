@@ -14,6 +14,10 @@ The default runtime model is subagent-only.
   context.
 - CCB-style inbox/outbox messaging is not used. Persistent records are written
   under `project-docs/records/` and feature bundle `results/` directories.
+- Use `agentflow feature context FEATURE-XXX-*` to refresh the active runtime
+  context before long multi-step work.
+- Use `agentflow feature status FEATURE-XXX-*` before stage handoff. CLI output
+  is the source of truth for runtime stage state.
 - Creator and reviewer roles are separated for spec, plan, tasks, implementation
   review, and final verification.
 
@@ -38,6 +42,7 @@ must clarify or draft those documents before implementation work begins.
 
 - Owns project state, gates, dispatch, records, and final archive.
 - Reads project docs and current feature bundle before delegating.
+- Uses CLI stage gates instead of relying on memory alone for stage transitions.
 - Keeps the main context focused on decisions and state, not implementation
   details.
 - Does not let multiple subagents edit the same unclear scope at the same time.
@@ -87,12 +92,13 @@ For a feature:
 
 1. Create or update `features/FEATURE-XXX-*/spec.md`.
 2. Review the spec.
-3. Create or update `plan.md`.
-4. Review the plan.
-5. Create or update `tasks.md`.
-6. Review tasks.
-7. Dispatch subagents using `dispatch.md`.
-8. Run implementation, test, review, fix, and archive.
+3. Run `agentflow feature status FEATURE-XXX-*` and resolve reported blockers.
+4. Create or update `plan.md`.
+5. Review the plan.
+6. Create or update `tasks.md`.
+7. Review tasks.
+8. Dispatch subagents using `dispatch.md`.
+9. Run implementation, test, review, fix, and archive.
 
 ## 5. Directory Boundaries
 
@@ -114,6 +120,14 @@ Every meaningful handoff or completion should leave a concise record:
 - review records: `project-docs/records/review/`
 - test records: `project-docs/records/test/`
 - feature archives: `features/FEATURE-XXX-*/archive.md`
+
+Recommended Git policy:
+
+- keep durable project knowledge in Git: specs, plans, tasks, review summaries,
+  test summaries, done summaries, archives
+- treat `.agentflow/state/` as generated runtime state
+- treat `project-docs/records/dispatch/` as transient dispatch logs unless the
+  project explicitly wants them versioned
 
 Records should include inputs, outputs, changed files, verification, risks, and
 next action.

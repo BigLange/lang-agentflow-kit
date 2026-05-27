@@ -1,5 +1,6 @@
 version: 1
 profile: lite
+complexity_profile: light
 
 project:
   feature_dir: features
@@ -28,9 +29,36 @@ integrations:
     enabled: false
     mode: optional
 
+runtime:
+  state_dir: .agentflow/state
+  active_context_file: active_context.json
+  enforce_dispatch_gate: true
+  enforce_archive_gate: true
+  hook_failure_policy: stop
+
+hooks:
+  before_plan:
+  before_tasks:
+  before_dispatch:
+  before_implement:
+  before_test:
+  before_review:
+  before_fix:
+  before_archive:
+  after_spec:
+  after_plan:
+  after_tasks:
+  after_dispatch:
+  after_implement:
+  after_test:
+  after_review:
+  after_fix:
+
 gates:
   require_spec_review: false
   require_plan_review: false
   require_task_review: false
+  require_dispatch_record_for_archive: true
+  require_summary_records_for_done: true
   require_tests_before_done: true
   require_review_before_commit: false

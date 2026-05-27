@@ -1,5 +1,9 @@
 # Archive: {{FEATURE_TITLE}}
 
+## Status
+
+Status: pending
+
 ## Summary
 
 - TBD
@@ -26,3 +30,14 @@
 - Plan: plan.md
 - Tasks: tasks.md
 - Dispatch: dispatch.md
+- Test: implementation/test.md
+- Review: implementation/review.md
+- Fix: results/fix.md
+
+## Completion Checklist
+
+- [ ] Summary is complete
+- [ ] Changed files are listed
+- [ ] Verification is summarized
+- [ ] Review result is recorded
+- [ ] Remaining risks are explicit or marked none

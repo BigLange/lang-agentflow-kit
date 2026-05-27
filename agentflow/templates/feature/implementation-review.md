@@ -15,3 +15,10 @@ Status: pending
 ## Required Fixes
 
 - TBD
+
+## Completion Checklist
+
+- [ ] Verdict is final
+- [ ] Findings are concrete or marked none
+- [ ] Test gaps are explicit or marked none
+- [ ] Required fixes are explicit or marked none

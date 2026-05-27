@@ -1,10 +1,15 @@
 # Subagent Dispatch Record: {{TASK_ID}}
 
-- from: Manager
-- to: {{ROLE}}
-- task: {{TASK_ID}}
-- summary: {{SUMMARY}}
-- status: pending
+## Status
+
+Status: dispatched
+
+## Routing
+
+- From: Manager
+- To: {{ROLE}}
+- Task: {{TASK_ID}}
+- Summary: {{SUMMARY}}
 
 ## Feature Bundle
 
@@ -19,7 +24,7 @@
 
 ## Assigned Scope
 
-- TBD
+- See `dispatch.md` and the assigned task row for the requested sub-scope.
 
 ## Expected Outputs
 
@@ -29,4 +34,4 @@
 
 ## Acceptance Criteria
 
-- TBD
+- Required outputs are written back into the feature bundle or project records.
