@@ -1,4 +1,5 @@
 docs/runtime-guardrails-todo.md
-.agentflow/state/
+.agentflow/state/*
+!.agentflow/state/features.yml
 project-docs/records/dispatch/
 .DS_Store

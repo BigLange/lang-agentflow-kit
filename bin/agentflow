@@ -40,6 +40,7 @@ Advanced feature commands:
   bin/agentflow feature sync FEATURE-001-title
   bin/agentflow feature dispatch FEATURE-001-title
   bin/agentflow feature archive FEATURE-001-title
+  bin/agentflow board render
 
 Legacy aliases:
   bin/agentflow feature "Feature title"
@@ -424,6 +425,128 @@ render_vars() {
   ' "$src" > "$dest"
 }
 
+state_features_file() {
+  load_project_paths
+  printf '%s/features.yml' "$STATE_DIR"
+}
+
+yaml_quote() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/'
+}
+
+ensure_features_state() {
+  local state_file
+  state_file="$(state_features_file)"
+  mkdir -p "$(dirname "$state_file")"
+  if [[ ! -f "$state_file" ]]; then
+    printf 'features:\n' > "$state_file"
+  fi
+}
+
+upsert_feature_state() {
+  local id="$1"
+  local title="$2"
+  local stage="$3"
+  local status="$4"
+  local owner="${5:-Manager}"
+  local mode="${6:-subagent}"
+  local verified="${7:-no}"
+  local notes="${8:-}"
+  local state_file tmp_file updated_at
+  ensure_features_state
+  state_file="$(state_features_file)"
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-features-state.XXXXXX")"
+  updated_at="$(date +%F)"
+
+  awk -v target_id="$id" '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ {
+      current = clean($0)
+      skip = (current == target_id)
+      if (skip) next
+    }
+    skip { next }
+    { print }
+  ' "$state_file" > "$tmp_file"
+
+  {
+    printf '  - id: %s\n' "$(yaml_quote "$id")"
+    printf '    title: %s\n' "$(yaml_quote "$title")"
+    printf '    stage: %s\n' "$(yaml_quote "$stage")"
+    printf '    status: %s\n' "$(yaml_quote "$status")"
+    printf '    mode: %s\n' "$(yaml_quote "$mode")"
+    printf '    owner: %s\n' "$(yaml_quote "$owner")"
+    printf '    verified: %s\n' "$(yaml_quote "$verified")"
+    printf '    notes: %s\n' "$(yaml_quote "$notes")"
+    printf '    updated_at: %s\n' "$(yaml_quote "$updated_at")"
+  } >> "$tmp_file"
+
+  mv "$tmp_file" "$state_file"
+}
+
+render_task_board() {
+  local state_file board tmp_file
+  load_project_paths
+  ensure_features_state
+  mkdir -p "$DOCS_DIR"
+  state_file="$(state_features_file)"
+  board="$DOCS_DIR/03_TASK_BOARD.md"
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-board.XXXXXX")"
+
+  {
+    printf '# Task Board\n\n'
+    printf '| ID | Feature | Stage | Mode | Owner | Status | Verified | Notes |\n'
+    printf '| --- | --- | --- | --- | --- | --- | --- | --- |\n'
+    awk '
+      function clean(value) {
+        sub(/^[^:]+:[[:space:]]*/, "", value)
+        gsub(/^"/, "", value)
+        gsub(/"$/, "", value)
+        gsub(/\\\|/, "|", value)
+        gsub(/\|/, "\\|", value)
+        return value
+      }
+      function value_or(value, fallback) {
+        return value == "" ? fallback : value
+      }
+      function flush() {
+        if (id == "") return
+        printf("| %s | %s | %s | %s | %s | %s | %s | %s |\n",
+          id,
+          value_or(title, id),
+          value_or(stage, "draft"),
+          value_or(mode, "subagent"),
+          value_or(owner, "Manager"),
+          value_or(status, "pending"),
+          value_or(verified, "no"),
+          value_or(notes, ""))
+      }
+      /^  - id:/ {
+        flush()
+        id = clean($0)
+        title = stage = mode = owner = status = verified = notes = ""
+        next
+      }
+      /^[[:space:]]+title:/ { title = clean($0); next }
+      /^[[:space:]]+stage:/ { stage = clean($0); next }
+      /^[[:space:]]+mode:/ { mode = clean($0); next }
+      /^[[:space:]]+owner:/ { owner = clean($0); next }
+      /^[[:space:]]+status:/ { status = clean($0); next }
+      /^[[:space:]]+verified:/ { verified = clean($0); next }
+      /^[[:space:]]+notes:/ { notes = clean($0); next }
+      END { flush() }
+    ' "$state_file"
+  } > "$tmp_file"
+
+  mv "$tmp_file" "$board"
+  printf 'Rendered task board from state: %s\n' "$board"
+}
+
 task_id_from_title() {
   local title="$1"
   printf '%s' "${title/FEATURE-/TASK-}"
@@ -460,7 +583,8 @@ ensure_gitignore_line() {
 
 ensure_runtime_gitignore() {
   local gitignore_file="$PROJECT_ROOT/.gitignore"
-  ensure_gitignore_line "$gitignore_file" ".agentflow/state/"
+  ensure_gitignore_line "$gitignore_file" ".agentflow/state/*"
+  ensure_gitignore_line "$gitignore_file" "!.agentflow/state/features.yml"
   ensure_gitignore_line "$gitignore_file" "project-docs/records/dispatch/"
   ensure_gitignore_line "$gitignore_file" ".DS_Store"
 }
@@ -491,6 +615,8 @@ ensure_runtime_dirs() {
   if [[ ! -f "$DOCS_DIR/02_API_SPEC.md" ]]; then
     cp "$TEMPLATE_DIR/project-docs/02_API_SPEC.md" "$DOCS_DIR/02_API_SPEC.md"
   fi
+
+  ensure_features_state
 }
 
 init_project() {
@@ -567,6 +693,9 @@ create_feature() {
   if [[ "$(config_bool "gates" "require_review_before_commit" "true")" == "true" ]]; then
     render_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request"
   fi
+
+  upsert_feature_state "$name" "$request" "draft" "pending" "Manager" "subagent" "no" "Created by agentflow feature create"
+  render_task_board
 
   printf 'Created %s\n' "$dir"
 }
@@ -1646,6 +1775,19 @@ handle_feature_command() {
   esac
 }
 
+handle_board_command() {
+  local subcommand="${1:-}"
+  case "$subcommand" in
+    render)
+      render_task_board
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 sync_tasks_for_feature() {
   local dir tasks_file current_stage tmp_file changes=0
   dir="$(feature_path "$1")"
@@ -1716,7 +1858,7 @@ dispatch_feature() {
 }
 
 archive_feature() {
-  local dir title task_id line board enforce_archive_gate completed_stage
+  local dir title task_id enforce_archive_gate completed_stage
   local review_record test_record done_record
   dir="$(feature_path "$1")"
   title="$(basename "$dir")"
@@ -1731,25 +1873,22 @@ archive_feature() {
   fi
 
   ensure_runtime_dirs
-  board="$DOCS_DIR/03_TASK_BOARD.md"
   review_record="$(review_record_path "$task_id")"
   test_record="$(test_record_path "$task_id")"
   done_record="$(done_record_path "$task_id")"
-  line="| $title | $title | archive | subagent | Manager | pending | no | See $dir/archive.md |"
 
   render_vars "$TEMPLATE_DIR/records/review-record.md" "$review_record" "$task_id" "Code Reviewer" "Summarize review outcome for $title" "$dir"
   render_vars "$TEMPLATE_DIR/records/test-record.md" "$test_record" "$task_id" "Test Agent" "Summarize test outcome for $title" "$dir"
   render_vars "$TEMPLATE_DIR/records/done-record.md" "$done_record" "$task_id" "Commit Agent" "Finalize archive and delivery summary for $title" "$dir"
 
-  if ! grep -F "$title" "$board" >/dev/null 2>&1; then
-    printf '%s\n' "$line" >> "$board"
-  fi
+  upsert_feature_state "$title" "$title" "archive" "pending" "Manager" "subagent" "no" "See $dir/archive.md"
+  render_task_board
 
   printf 'Wrote summary records:\n'
   printf '  %s\n' "$review_record"
   printf '  %s\n' "$test_record"
   printf '  %s\n' "$done_record"
-  printf 'Archive linked in task board: %s\n' "$board"
+  printf 'Archive linked in task board: %s\n' "$DOCS_DIR/03_TASK_BOARD.md"
 }
 
 main() {
@@ -1767,6 +1906,10 @@ main() {
     feature)
       shift
       handle_feature_command "$@"
+      ;;
+    board)
+      shift
+      handle_board_command "$@"
       ;;
     check)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi

@@ -1,6 +1,6 @@
 # Lang AgentFlow Kit
 
-Current version: `0.3.0`
+Current version: `0.4.0`
 
 Lang AgentFlow Kit 是一个本地项目初始化工具，用来给项目生成一套
 **subagent-first** 的 AI 开发协作架构。
@@ -314,6 +314,25 @@ agentflow feature status FEATURE-001-demo
 
 - [docs/config-schema.md](./docs/config-schema.md)
 
+## State-Backed Task Board
+
+`project-docs/03_TASK_BOARD.md` 是渲染结果，不再是 feature 状态的源数据。
+当前 canonical state 在：
+
+```text
+.agentflow/state/features.yml
+```
+
+重新渲染 task board：
+
+```sh
+agentflow board render
+```
+
+`feature create` 和 `feature archive` 会更新 `features.yml` 并重新渲染 board。
+如果需要人工修正 feature 的 board 状态，应编辑 `features.yml`，然后运行
+`agentflow board render`。
+
 ## Stage Model And Gates
 
 当前 runtime 的阶段模型是：
@@ -623,7 +642,8 @@ features/FEATURE-XXX-*/archive.md
 
 - `features/FEATURE-XXX-*/spec.md`、`plan.md`、`tasks.md`、`implementation/review.md`、`implementation/test.md`、`results/fix.md`、`archive.md` 是 durable knowledge，默认应进入 Git。
 - `project-docs/records/review/`、`project-docs/records/test/`、`project-docs/records/done/` 是项目级 summary records，默认应进入 Git。
-- `.agentflow/state/` 是生成态 runtime state，默认不进入 Git。
+- `.agentflow/state/features.yml` 是 task board 的 canonical state，默认应进入 Git。
+- `.agentflow/state/` 下其他文件是生成态 runtime state，默认不进入 Git。
 - `project-docs/records/dispatch/` 是高频 dispatch log，默认按 transient 处理；如果团队需要审计完整派发历史，可以主动移出 `.gitignore`。
 
 ## Git Hygiene
@@ -633,14 +653,15 @@ features/FEATURE-XXX-*/archive.md
 - Durable knowledge:
   `spec.md`、`plan.md`、`tasks.md`、`implementation/review.md`、
   `implementation/test.md`、`results/fix.md`、`archive.md`、以及
-  `project-docs/records/done|review|test/`
+  `project-docs/records/done|review|test/`、`.agentflow/state/features.yml`
 - Transient runtime state:
-  `.agentflow/state/`、`project-docs/records/dispatch/`
+  `.agentflow/state/*`（除 `features.yml`）、`project-docs/records/dispatch/`
 
 默认初始化会把这些高频运行态路径加入 `.gitignore`：
 
 ```text
-.agentflow/state/
+.agentflow/state/*
+!.agentflow/state/features.yml
 project-docs/records/dispatch/
 .DS_Store
 ```

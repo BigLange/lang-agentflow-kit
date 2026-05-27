@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-05-27
+
+State-backed board rendering release.
+
+### Added
+
+- `.agentflow/state/features.yml` as the source data for the project task board.
+- `agentflow board render` to regenerate `project-docs/03_TASK_BOARD.md` from state.
+- Feature creation now records new features in state and renders the board.
+
+### Changed
+
+- `project-docs/03_TASK_BOARD.md` is now treated as rendered output instead of
+  the canonical feature state source.
+- `feature archive` updates feature state and renders the board instead of
+  appending directly to Markdown.
+- Git hygiene now keeps `.agentflow/state/features.yml` versioned while other
+  generated runtime state remains ignored.
+
 ## 0.3.0 - 2026-05-27
 
 Hardening release for YAML-driven execution, gate semantics, and active context.

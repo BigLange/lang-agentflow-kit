@@ -368,13 +368,32 @@ Generated context example:
 Recommended default:
 
 - durable and versioned: feature specs, plans, tasks, test summaries, review
-  summaries, fix summaries, archives, and done records
-- generated and ignored: `.agentflow/state/`
+  summaries, fix summaries, archives, done records, and
+  `.agentflow/state/features.yml`
+- generated and ignored: `.agentflow/state/*` except `features.yml`
 - transient by default: `project-docs/records/dispatch/`
 
 Projects that require full audit trails can remove
 `project-docs/records/dispatch/` from `.gitignore` and treat dispatch records as
 durable history.
+
+## Board State
+
+`project-docs/03_TASK_BOARD.md` is rendered output. The source data is:
+
+```text
+.agentflow/state/features.yml
+```
+
+Render the Markdown board with:
+
+```sh
+agentflow board render
+```
+
+`feature create` and `feature archive` update `features.yml` and render the
+board. Manual board corrections should be made in `features.yml`, then rendered
+back to Markdown.
 
 ## Template Task Sync Model
 

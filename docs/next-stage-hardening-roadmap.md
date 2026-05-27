@@ -254,9 +254,9 @@ agentflow board render
 
 Responsibilities:
 
-- [ ] Read `.agentflow/state/features.yml`.
-- [ ] Regenerate `project-docs/03_TASK_BOARD.md`.
-- [ ] Treat Markdown as output, not canonical state.
+- [x] Read `.agentflow/state/features.yml`.
+- [x] Regenerate `project-docs/03_TASK_BOARD.md`.
+- [x] Treat Markdown as output, not canonical state.
 
 ## TODO 5: Review Isolation
 
@@ -409,9 +409,9 @@ sequence.
 
 ### v0.5: State + Board Render
 
-- [ ] Add `.agentflow/state/features.yml`.
-- [ ] Add `agentflow board render`.
-- [ ] Render Markdown board from state.
+- [x] Add `.agentflow/state/features.yml`.
+- [x] Add `agentflow board render`.
+- [x] Render Markdown board from state.
 
 ### v0.6: Review Isolation
 
