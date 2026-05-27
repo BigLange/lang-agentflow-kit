@@ -4,6 +4,17 @@
 
 Runtime guardrails release.
 
+### Rationale
+
+This release addresses the main weakness of the earlier Markdown-only workflow:
+agents could generate the right files but still lose track of stage state during
+long, multi-agent work. Specs could contain placeholders while implementation
+started, review files could remain pending, and task boards could drift away
+from actual feature readiness.
+
+`0.2.0` adds lightweight runtime checks so feature state can be inspected,
+blocked, refreshed, and handed off without replacing the Markdown workflow.
+
 ### Added
 
 - `agentflow feature verify FEATURE --stage <stage>` for deterministic stage verification.
