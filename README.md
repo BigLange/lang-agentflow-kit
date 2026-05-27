@@ -1,6 +1,6 @@
 # Lang AgentFlow Kit
 
-Current version: `0.2.0`
+Current version: `0.3.0`
 
 Lang AgentFlow Kit 是一个本地项目初始化工具，用来给项目生成一套
 **subagent-first** 的 AI 开发协作架构。
@@ -426,14 +426,38 @@ Feature: FEATURE-001-user-auth
 Stage: spec
 ```
 
-`feature context` 会生成小型 JSON，供 Agent 在长任务前刷新工作视图：
+`feature context` 会生成小型 JSON 和 Markdown 工作合同。Markdown 版本是 Agent
+开工前应先读的入口文件：
+
+```text
+.agentflow/state/active_context.md
+.agentflow/state/active_context.json
+```
+
+`active_context.md` 以固定 header 开头：
+
+```text
+This is the current working contract.
+Start from this file before doing any work.
+Do not start coding before checking the current gate.
+Only open additional docs/files when this context references them or the current task requires verification.
+```
+
+JSON 版本保留给脚本和工具读取：
 
 ```json
 {
   "feature": "FEATURE-001-user-auth",
   "current_stage": "spec",
   "next_gate": "tasks",
+  "goal": "User can sign in with email.",
+  "next_step": "Run `agentflow gate tasks FEATURE` and resolve the first blocker before advancing.",
   "open_tasks": [],
+  "required_files": [],
+  "must_read": [],
+  "forbidden_actions": [],
+  "open_questions": [],
+  "current_blockers": [],
   "key_files": []
 }
 ```

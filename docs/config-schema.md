@@ -25,6 +25,7 @@ project:
 runtime:
   state_dir: .agentflow/state
   active_context_file: active_context.json
+  active_context_markdown_file: active_context.md
   enforce_dispatch_gate: true
   enforce_archive_gate: true
   hook_failure_policy: stop
@@ -82,7 +83,11 @@ These keys are read by the current `bin/agentflow` runtime.
   Output directory for generated runtime state such as `active_context.json`.
 - `runtime.active_context_file`
   Default: `active_context.json`
-  File name written by `agentflow feature context`.
+  JSON file name written by `agentflow feature context`.
+- `runtime.active_context_markdown_file`
+  Default: `active_context.md`
+  Markdown file name written by `agentflow feature context`. This is the
+  recommended first file for agents to read before work.
 - `runtime.enforce_dispatch_gate`
   Default: `true`
   If true, `feature dispatch` hard-checks the `dispatch` gate first.

@@ -18,6 +18,7 @@ FEATURE_DIR="$PROJECT_ROOT/features"
 DOCS_DIR="$PROJECT_ROOT/project-docs"
 STATE_DIR="$PROJECT_ROOT/.agentflow/state"
 ACTIVE_CONTEXT_FILE="active_context.json"
+ACTIVE_CONTEXT_MD_FILE="active_context.md"
 TEMPLATE_DIR="$PACKAGE_ROOT/agentflow/templates"
 PROFILE="standard"
 VERIFY_ERRORS=()
@@ -210,12 +211,14 @@ load_project_paths() {
     docs_dir="$(yaml_nested_value "project" "docs_dir" "$CONFIG" || true)"
     state_dir="$(yaml_nested_value "runtime" "state_dir" "$CONFIG" || true)"
     active_context_file="$(yaml_nested_value "runtime" "active_context_file" "$CONFIG" || true)"
+    ACTIVE_CONTEXT_MD_FILE="$(yaml_nested_value "runtime" "active_context_markdown_file" "$CONFIG" || true)"
   fi
 
   FEATURE_DIR="$(resolve_project_path "${feature_dir:-features}")"
   DOCS_DIR="$(resolve_project_path "${docs_dir:-project-docs}")"
   STATE_DIR="$(resolve_project_path "${state_dir:-.agentflow/state}")"
   ACTIVE_CONTEXT_FILE="${active_context_file:-active_context.json}"
+  ACTIVE_CONTEXT_MD_FILE="${ACTIVE_CONTEXT_MD_FILE:-active_context.md}"
 }
 
 config_bool() {
@@ -1164,17 +1167,191 @@ emit_json_array_from_lines() {
   done <<< "$lines"
 }
 
+emit_markdown_list_from_lines() {
+  local lines="$1"
+  local fallback="$2"
+  local printed=0
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]*[-*][[:space:]]+//')"
+    printf -- '- %s\n' "$line"
+    printed=1
+  done <<< "$lines"
+  if [[ "$printed" -eq 0 ]]; then
+    printf -- '- %s\n' "$fallback"
+  fi
+}
+
+markdown_section_content() {
+  local file="$1"
+  local heading="$2"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  awk -v heading="$heading" '
+    $0 == heading {
+      in_section = 1
+      next
+    }
+    in_section && $0 ~ /^## / {
+      exit
+    }
+    in_section {
+      print
+    }
+  ' "$file" |
+    sed -E 's/[[:space:]]+$//' |
+    sed '/^[[:space:]]*$/d' |
+    head -12
+}
+
+first_nonempty_line() {
+  local text="$1"
+  local fallback="$2"
+  local line
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    printf '%s' "$line"
+    return
+  done <<< "$text"
+  printf '%s' "$fallback"
+}
+
+required_files_for_gate() {
+  local dir="$1"
+  local gate="$2"
+  local side
+  case "$gate" in
+    plan)
+      printf '%s\n' "$dir/spec.md"
+      [[ "$(config_bool "gates" "require_spec_review" "true")" == "true" ]] && printf '%s\n' "$dir/spec-review.md"
+      ;;
+    tasks)
+      printf '%s\n' "$dir/spec.md" "$dir/plan.md"
+      [[ "$(config_bool "gates" "require_plan_review" "true")" == "true" ]] && printf '%s\n' "$dir/plan-review.md"
+      ;;
+    dispatch)
+      printf '%s\n' "$dir/spec.md" "$dir/plan.md" "$dir/tasks.md"
+      [[ "$(config_bool "gates" "require_task_review" "true")" == "true" ]] && printf '%s\n' "$dir/task-review.md"
+      ;;
+    implement)
+      printf '%s\n' "$dir/dispatch.md" "$dir/implementation/api.md"
+      while IFS= read -r side; do
+        printf '%s\n' "$dir/results/$side.md"
+      done < <(implementation_target_sides)
+      ;;
+    test)
+      printf '%s\n' "$dir/implementation/test.md"
+      ;;
+    review)
+      printf '%s\n' "$dir/implementation/review.md"
+      ;;
+    fix)
+      printf '%s\n' "$dir/results/fix.md"
+      ;;
+    archive)
+      printf '%s\n' "$dir/archive.md"
+      ;;
+    done)
+      printf '%s\n' \
+        "$(review_record_path "$(task_id_from_title "$(basename "$dir")")")" \
+        "$(test_record_path "$(task_id_from_title "$(basename "$dir")")")" \
+        "$(done_record_path "$(task_id_from_title "$(basename "$dir")")")"
+      ;;
+    complete)
+      printf 'No required files; feature is complete.\n'
+      ;;
+    *)
+      effective_key_files "$dir" "$(basename "$dir")"
+      ;;
+  esac
+}
+
+must_read_files_for_stage() {
+  local dir="$1"
+  local stage="$2"
+  case "$stage" in
+    draft|spec)
+      printf '%s\n' "$dir/spec.md"
+      [[ "$(config_bool "gates" "require_spec_review" "true")" == "true" ]] && printf '%s\n' "$dir/spec-review.md"
+      ;;
+    plan)
+      printf '%s\n' "$dir/spec.md" "$dir/plan.md"
+      ;;
+    tasks)
+      printf '%s\n' "$dir/spec.md" "$dir/plan.md" "$dir/tasks.md"
+      ;;
+    dispatch|implement)
+      printf '%s\n' "$dir/plan.md" "$dir/tasks.md" "$dir/dispatch.md" "$dir/implementation/api.md"
+      ;;
+    test)
+      printf '%s\n' "$dir/tasks.md" "$dir/implementation/test.md"
+      ;;
+    review|fix)
+      printf '%s\n' "$dir/implementation/review.md" "$dir/results/fix.md"
+      ;;
+    archive|done)
+      printf '%s\n' "$dir/archive.md"
+      ;;
+    *)
+      printf '%s\n' "$dir/spec.md" "$dir/plan.md" "$dir/tasks.md"
+      ;;
+  esac
+}
+
+next_step_for_context() {
+  local next_gate="$1"
+  local feature_name="$2"
+  case "$next_gate" in
+    complete) printf 'No next gate; feature is complete.' ;;
+    *) printf 'Run `agentflow gate %s %s` and resolve the first blocker before advancing.' "$next_gate" "$feature_name" ;;
+  esac
+}
+
+forbidden_actions_for_context() {
+  cat <<'TEXT'
+Do not start coding before checking the current gate.
+Do not edit generated runtime state by hand.
+Do not skip required review, test, or archive records.
+Do not open unrelated docs or code unless the current task requires verification.
+TEXT
+}
+
 build_active_context() {
   local dir="$1"
-  local feature_name current_stage next_gate output_file open_tasks key_files
+  local feature_name current_stage next_gate output_file md_output_file
+  local open_tasks key_files required_files must_read related_files goal open_questions blockers next_step forbidden_actions
+  local error blocker_count
   feature_name="$(basename "$dir")"
   current_stage="$(infer_feature_stage "$dir")"
   next_gate="$(next_gate_for_stage "$current_stage")"
   ensure_runtime_dirs
   output_file="$STATE_DIR/$ACTIVE_CONTEXT_FILE"
+  md_output_file="$STATE_DIR/$ACTIVE_CONTEXT_MD_FILE"
 
   open_tasks="$(grep -E '^- \[ \] T[0-9]{3}' "$dir/tasks.md" 2>/dev/null || true)"
   key_files="$(effective_key_files "$dir" "$feature_name")"
+  required_files="$(required_files_for_gate "$dir" "$next_gate")"
+  must_read="$(must_read_files_for_stage "$dir" "$current_stage")"
+  related_files="$(printf '%s\n%s\n' "$must_read" "$required_files" | sed '/^$/d' | awk '!seen[$0]++' | head -12)"
+  goal="$(first_nonempty_line "$(markdown_section_content "$dir/spec.md" "## User Goal")" "Goal not captured yet.")"
+  open_questions="$(markdown_section_content "$dir/spec.md" "## Open Questions")"
+  next_step="$(next_step_for_context "$next_gate" "$feature_name")"
+  forbidden_actions="$(forbidden_actions_for_context)"
+  VERIFY_ERRORS=()
+  if [[ "$next_gate" != "complete" ]]; then
+    run_verify_stage_checks "$dir" "$(stage_for_next_gate_check "$next_gate")"
+    blockers=""
+    blocker_count=0
+    for error in "${VERIFY_ERRORS[@]}"; do
+      blockers="${blockers}$(first_nonempty_line "$error" "$error")
+"
+      blocker_count=$((blocker_count + 1))
+      [[ "$blocker_count" -ge 5 ]] && break
+    done
+  else
+    blockers=""
+  fi
 
   cat > "$output_file" <<JSON
 {
@@ -1182,8 +1359,25 @@ build_active_context() {
   "feature_dir": "$(json_escape "$dir")",
   "current_stage": "$(json_escape "$current_stage")",
   "next_gate": "$(json_escape "$next_gate")",
+  "goal": "$(json_escape "$goal")",
+  "next_step": "$(json_escape "$next_step")",
   "open_tasks": [
 $(emit_json_array_from_lines "$open_tasks" "    ")
+  ],
+  "required_files": [
+$(emit_json_array_from_lines "$required_files" "    ")
+  ],
+  "must_read": [
+$(emit_json_array_from_lines "$must_read" "    ")
+  ],
+  "forbidden_actions": [
+$(emit_json_array_from_lines "$forbidden_actions" "    ")
+  ],
+  "open_questions": [
+$(emit_json_array_from_lines "$open_questions" "    ")
+  ],
+  "current_blockers": [
+$(emit_json_array_from_lines "$blockers" "    ")
   ],
   "key_files": [
 $(emit_json_array_from_lines "$key_files" "    ")
@@ -1191,7 +1385,61 @@ $(emit_json_array_from_lines "$key_files" "    ")
 }
 JSON
 
+  cat > "$md_output_file" <<MD
+# Active Context
+
+This is the current working contract.
+Start from this file before doing any work.
+Do not start coding before checking the current gate.
+Only open additional docs/files when this context references them or the current task requires verification.
+
+## Feature
+
+$feature_name
+
+## Current Stage
+
+$current_stage
+
+## Current Gate
+
+$next_gate
+
+## Goal
+
+$goal
+
+## Required Files
+
+$(emit_markdown_list_from_lines "$required_files" "No required files for the current gate.")
+
+## Must Read
+
+$(emit_markdown_list_from_lines "$must_read" "No must-read files inferred.")
+
+## Forbidden Actions
+
+$(emit_markdown_list_from_lines "$forbidden_actions" "No additional forbidden actions.")
+
+## Next Step
+
+$next_step
+
+## Current Blockers
+
+$(emit_markdown_list_from_lines "$blockers" "No current gate blockers detected.")
+
+## Open Questions
+
+$(emit_markdown_list_from_lines "$open_questions" "No open questions captured.")
+
+## Related Code Files
+
+$(emit_markdown_list_from_lines "$related_files" "No related files inferred.")
+MD
+
   printf 'Wrote active context: %s\n' "$output_file"
+  printf 'Wrote active context: %s\n' "$md_output_file"
 }
 
 record_status_label() {

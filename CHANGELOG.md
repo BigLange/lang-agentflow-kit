@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0 - 2026-05-27
+
+Hardening release for YAML-driven execution, gate semantics, and active context.
+
+### Added
+
+- YAML-driven feature generation and checks from effective config.
+- `implementation.target_sides` for backend/frontend/mobile result selection.
+- Canonical no-mutation gate command: `agentflow gate STAGE FEATURE`.
+- Markdown active context output at `.agentflow/state/active_context.md`.
+- Stronger active context fields for goal, required files, must-read files,
+  forbidden actions, next step, open questions, and current blockers.
+
+### Changed
+
+- `agentflow check FEATURE` now fails on obvious placeholders, not only missing files.
+- Pure gate checks report stable `Gate Decision` and `Blockers` output without
+  writing context, syncing tasks, or archiving.
+- Stage gates now check more explicit stage-specific readiness rules.
+- `feature context` continues writing JSON and now also writes Markdown as the
+  recommended first-read contract for agents.
+
 ## 0.2.0 - 2026-05-27
 
 Runtime guardrails release.

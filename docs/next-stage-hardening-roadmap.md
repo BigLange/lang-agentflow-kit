@@ -166,6 +166,11 @@ Generate one or both:
 .agentflow/state/active_context.json
 ```
 
+Status:
+
+- [x] Generate `.agentflow/state/active_context.md`.
+- [x] Continue generating `.agentflow/state/active_context.json`.
+
 ### Required Content
 
 Keep active context short. It should include:
@@ -183,6 +188,17 @@ Open Questions:
 Related Code Files:
 ```
 
+- [x] Include feature.
+- [x] Include current stage.
+- [x] Include current gate.
+- [x] Include goal.
+- [x] Include required files.
+- [x] Include must-read files.
+- [x] Include forbidden actions.
+- [x] Include next step.
+- [x] Include open questions.
+- [x] Include related code files.
+
 ### Required Header
 
 ```text
@@ -191,6 +207,8 @@ Start from this file before doing any work.
 Do not start coding before checking the current gate.
 Only open additional docs/files when this context references them or the current task requires verification.
 ```
+
+- [x] Add required active context header.
 
 Active context is the current task entry point, not the only source of truth.
 Agents should read it first, then open referenced docs and code as needed.
@@ -372,22 +390,22 @@ sequence.
 
 ### v0.2.x: YAML Truly Controls Execution
 
-- [ ] Read config.
-- [ ] Merge default config.
-- [ ] Generate feature files from effective config.
-- [ ] Check files from effective config.
+- [x] Read config.
+- [x] Merge default config.
+- [x] Generate feature files from effective config.
+- [x] Check files from effective config.
 
 ### v0.3: Gate System Hardening
 
-- [ ] Split `check` and `gate` semantics.
-- [ ] Add stage-specific gate commands.
-- [ ] Ensure each gate checks whether the stage can advance.
+- [x] Split `check` and `gate` semantics.
+- [x] Add stage-specific gate commands.
+- [x] Ensure each gate checks whether the stage can advance.
 
 ### v0.4: Active Context Hardening
 
-- [ ] Generate stronger active context.
-- [ ] Include current working contract header.
-- [ ] Reduce long-task context drift.
+- [x] Generate stronger active context.
+- [x] Include current working contract header.
+- [x] Reduce long-task context drift.
 
 ### v0.5: State + Board Render
 
