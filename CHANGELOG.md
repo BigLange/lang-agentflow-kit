@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 - 2026-05-27
+
+Review isolation hardening release.
+
+### Added
+
+- `review.<stage>.mode` config for `self`, `separate-session`, and `human`.
+- Gate checks for `separate-session` review metadata.
+- `agentflow approve FEATURE --stage <stage>` for CLI-written human approval
+  metadata.
+- Review templates now include a minimal review metadata section.
+
+### Changed
+
+- `review.mode=self` remains compatible but emits a weak-isolation warning.
+- `review.mode=human` requires CLI approval metadata instead of trusting
+  hand-written human sign-off.
+- The `full` profile defaults to stronger review isolation than `standard`.
+
 ## 0.4.0 - 2026-05-27
 
 State-backed board rendering release.

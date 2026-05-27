@@ -45,6 +45,16 @@ implementation:
     - frontend
     - mobile
 
+review:
+  spec:
+    mode: separate-session
+  plan:
+    mode: separate-session
+  tasks:
+    mode: separate-session
+  implementation:
+    mode: human
+
 hooks:
   before_plan:
   before_tasks:

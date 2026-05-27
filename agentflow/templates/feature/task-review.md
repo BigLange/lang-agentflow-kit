@@ -4,6 +4,14 @@
 
 Status: pending
 
+## Review Metadata
+
+review_mode: self
+reviewer: self
+decision: pending
+blocking_issues: pending
+reviewed_at: pending
+
 ## Findings
 
 - TBD

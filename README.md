@@ -1,6 +1,6 @@
 # Lang AgentFlow Kit
 
-Current version: `0.4.0`
+Current version: `0.5.0`
 
 Lang AgentFlow Kit 是一个本地项目初始化工具，用来给项目生成一套
 **subagent-first** 的 AI 开发协作架构。
@@ -332,6 +332,33 @@ agentflow board render
 `feature create` 和 `feature archive` 会更新 `features.yml` 并重新渲染 board。
 如果需要人工修正 feature 的 board 状态，应编辑 `features.yml`，然后运行
 `agentflow board render`。
+
+## Review Isolation
+
+`agentflow.config.yml` 可以为 review gate 指定隔离模式：
+
+```yaml
+review:
+  spec:
+    mode: self
+  plan:
+    mode: separate-session
+  tasks:
+    mode: self
+  implementation:
+    mode: human
+```
+
+支持模式：
+
+- `self`：兼容默认模式，gate 会提示这是弱隔离 review。
+- `separate-session`：review 文件必须包含 `review_mode: separate-session`、
+  `reviewer: external`、`decision`、`blocking_issues: 0` 和 `reviewed_at`。
+- `human`：必须通过 CLI 写入人工批准元数据：
+
+```sh
+agentflow approve FEATURE-001-demo --stage spec
+```
 
 ## Stage Model And Gates
 

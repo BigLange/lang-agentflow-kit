@@ -186,6 +186,52 @@ runtime simple and easy to parse from shell.
   This project will not generate or require `results/frontend.md` or
   `results/mobile.md`.
 
+### `review`
+
+Review isolation is runtime-enforced when review gates are enabled.
+
+Supported modes:
+
+- `self`: the current AI/session may review its own work. This is compatible
+  with earlier projects but emits a weak-isolation warning.
+- `separate-session`: the review file must include external review metadata:
+
+  ```yaml
+  review_mode: separate-session
+  reviewer: external
+  decision: approved
+  blocking_issues: 0
+  reviewed_at: 2026-05-27
+  ```
+
+- `human`: human approval must be written by the CLI:
+
+  ```sh
+  agentflow approve FEATURE-001-demo --stage spec
+  ```
+
+  The command writes:
+
+  ```yaml
+  approved_by: local-user
+  approved_at: 2026-05-27T12:00:00
+  approval_source: cli
+  ```
+
+Config shape:
+
+```yaml
+review:
+  spec:
+    mode: self
+  plan:
+    mode: self
+  tasks:
+    mode: self
+  implementation:
+    mode: self
+```
+
 Future versions may replace or supplement the global booleans with per-stage
 structured rules:
 

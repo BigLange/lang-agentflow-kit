@@ -22,6 +22,7 @@ ACTIVE_CONTEXT_MD_FILE="active_context.md"
 TEMPLATE_DIR="$PACKAGE_ROOT/agentflow/templates"
 PROFILE="standard"
 VERIFY_ERRORS=()
+VERIFY_WARNINGS=()
 
 usage() {
   cat <<'USAGE'
@@ -41,6 +42,7 @@ Advanced feature commands:
   bin/agentflow feature dispatch FEATURE-001-title
   bin/agentflow feature archive FEATURE-001-title
   bin/agentflow board render
+  bin/agentflow approve FEATURE-001-title --stage spec|plan|tasks|implementation
 
 Legacy aliases:
   bin/agentflow feature "Feature title"
@@ -157,6 +159,39 @@ yaml_nested_value() {
   ' "$file"
 }
 
+yaml_three_level_value() {
+  local section="$1"
+  local subsection="$2"
+  local key="$3"
+  local file="$4"
+  awk -v section="$section" -v subsection="$subsection" -v key="$key" '
+    $0 ~ "^" section ":" {
+      in_section = 1
+      next
+    }
+    in_section && $0 ~ "^[^[:space:]]" {
+      in_section = 0
+      in_subsection = 0
+    }
+    in_section && $0 ~ "^[[:space:]]{2}" subsection ":" {
+      in_subsection = 1
+      next
+    }
+    in_subsection && $0 ~ "^[[:space:]]{2}[A-Za-z0-9_-]+:" {
+      in_subsection = 0
+    }
+    in_subsection {
+      line = $0
+      gsub(/^[[:space:]]+/, "", line)
+      if (line ~ "^" key ":") {
+        sub("^[^:]+:[[:space:]]*", "", line)
+        print line
+        exit
+      }
+    }
+  ' "$file"
+}
+
 yaml_list_under_section_key() {
   local section="$1"
   local key="$2"
@@ -248,6 +283,23 @@ config_string() {
   fi
   value="${value:-$default_value}"
   printf '%s' "$value"
+}
+
+review_mode_for_stage() {
+  local stage="$1"
+  local review_key="$stage"
+  local mode="self"
+  case "$stage" in
+    implement|implementation|review) review_key="implementation" ;;
+  esac
+  if [[ -f "$CONFIG" ]]; then
+    mode="$(yaml_three_level_value "review" "$review_key" "mode" "$CONFIG" || true)"
+  fi
+  mode="${mode:-self}"
+  case "$mode" in
+    self|separate-session|human) printf '%s' "$mode" ;;
+    *) printf 'self' ;;
+  esac
 }
 
 config_list() {
@@ -713,6 +765,45 @@ feature_path() {
   fi
 }
 
+review_file_for_stage() {
+  local dir="$1"
+  local stage="$2"
+  case "$stage" in
+    spec) printf '%s/spec-review.md' "$dir" ;;
+    plan) printf '%s/plan-review.md' "$dir" ;;
+    tasks|task) printf '%s/task-review.md' "$dir" ;;
+    implementation|implement|review) printf '%s/implementation/review.md' "$dir" ;;
+    *)
+      printf 'Unsupported approval stage: %s\n' "$stage" >&2
+      exit 1
+      ;;
+  esac
+}
+
+approve_feature_stage() {
+  local feature="$1"
+  local stage="$2"
+  local dir review_file tmp_file approved_at
+  dir="$(feature_path "$feature")"
+  review_file="$(review_file_for_stage "$dir" "$stage")"
+  if [[ ! -f "$review_file" ]]; then
+    printf 'Cannot approve missing review file: %s\n' "$review_file" >&2
+    exit 1
+  fi
+
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-approval.XXXXXX")"
+  grep -Ev '^(approved_by|approved_at|approval_source):' "$review_file" > "$tmp_file" || true
+  approved_at="$(date +%Y-%m-%dT%H:%M:%S%z)"
+  {
+    printf '\n'
+    printf 'approved_by: local-user\n'
+    printf 'approved_at: %s\n' "$approved_at"
+    printf 'approval_source: cli\n'
+  } >> "$tmp_file"
+  mv "$tmp_file" "$review_file"
+  printf 'Approved %s at stage %s via CLI metadata: %s\n' "$(basename "$dir")" "$stage" "$review_file"
+}
+
 check_feature() {
   local dir path missing=0 placeholders=0 placeholder_file
   dir="$(feature_path "$1")"
@@ -741,6 +832,10 @@ check_feature() {
 
 add_verify_error() {
   VERIFY_ERRORS+=("$1")
+}
+
+add_verify_warning() {
+  VERIFY_WARNINGS+=("$1")
 }
 
 require_file() {
@@ -845,20 +940,78 @@ require_no_blocking_issues() {
   if [[ ! -f "$file" ]]; then
     return
   fi
-  if grep -Eiq 'blocking|blocker|must fix|rejected|needs changes' "$file"; then
+  if grep -Eiq 'blocker|must fix|rejected|needs changes' "$file"; then
     add_verify_error "$label still records blocking issues: $file"
   fi
+}
+
+metadata_value() {
+  local file="$1"
+  local key="$2"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  awk -v key="$key" '
+    $0 ~ "^" key ":" {
+      line = $0
+      sub("^[^:]+:[[:space:]]*", "", line)
+      gsub(/^"/, "", line)
+      gsub(/"$/, "", line)
+      print line
+      exit
+    }
+  ' "$file"
+}
+
+require_review_isolation() {
+  local file="$1"
+  local label="$2"
+  local stage="$3"
+  local mode review_mode reviewer decision blocking_issues reviewed_at
+  local approved_by approved_at approval_source
+  [[ ! -f "$file" ]] && return
+
+  mode="$(review_mode_for_stage "$stage")"
+  case "$mode" in
+    self)
+      add_verify_warning "$label uses review.mode=self; this is a weak review isolation mode."
+      ;;
+    separate-session)
+      review_mode="$(metadata_value "$file" "review_mode")"
+      reviewer="$(metadata_value "$file" "reviewer")"
+      decision="$(metadata_value "$file" "decision")"
+      blocking_issues="$(metadata_value "$file" "blocking_issues")"
+      reviewed_at="$(metadata_value "$file" "reviewed_at")"
+      [[ "$review_mode" == "separate-session" ]] || add_verify_error "$label missing review_mode: separate-session metadata: $file"
+      [[ "$reviewer" == "external" ]] || add_verify_error "$label separate-session review must use reviewer: external: $file"
+      [[ "$decision" =~ ^(approved|rejected|needs[[:space:]]changes)$ ]] || add_verify_error "$label separate-session review must declare decision: approved, rejected, or needs changes: $file"
+      [[ "$blocking_issues" == "0" ]] || add_verify_error "$label separate-session review must declare blocking_issues: 0: $file"
+      [[ -n "$reviewed_at" ]] || add_verify_error "$label separate-session review must include reviewed_at: $file"
+      ;;
+    human)
+      approved_by="$(metadata_value "$file" "approved_by")"
+      approved_at="$(metadata_value "$file" "approved_at")"
+      approval_source="$(metadata_value "$file" "approval_source")"
+      [[ "$approved_by" == "local-user" ]] || add_verify_error "$label requires human approval metadata approved_by: local-user: $file"
+      [[ -n "$approved_at" ]] || add_verify_error "$label requires human approval metadata approved_at: $file"
+      [[ "$approval_source" == "cli" ]] || add_verify_error "$label requires human approval metadata approval_source: cli: $file"
+      ;;
+  esac
 }
 
 verify_review_gate() {
   local file="$1"
   local label="$2"
+  local stage="${3:-}"
   require_file "$file" "$label" || return
   require_no_placeholders "$file" "$label"
   require_status_not_pending "$file" "$label"
   require_no_open_checkboxes "$file" "$label"
   require_review_decision "$file" "$label"
   require_no_blocking_issues "$file" "$label"
+  if [[ -n "$stage" ]]; then
+    require_review_isolation "$file" "$label" "$stage"
+  fi
 }
 
 verify_stage_spec() {
@@ -873,7 +1026,7 @@ verify_stage_spec() {
   require_heading_with_content "$dir/spec.md" "## Acceptance Criteria" "spec.md is missing acceptance criteria"
 
   if [[ "$spec_review_required" == "true" ]]; then
-    verify_review_gate "$dir/spec-review.md" "spec-review.md"
+    verify_review_gate "$dir/spec-review.md" "spec-review.md" "spec"
   fi
 }
 
@@ -890,7 +1043,7 @@ verify_stage_plan() {
   require_heading_with_content "$dir/plan.md" "## Risks" "plan.md is missing risk analysis"
 
   if [[ "$plan_review_required" == "true" ]]; then
-    verify_review_gate "$dir/plan-review.md" "plan-review.md"
+    verify_review_gate "$dir/plan-review.md" "plan-review.md" "plan"
   fi
 }
 
@@ -906,7 +1059,7 @@ verify_stage_tasks() {
   require_line_match "$dir/tasks.md" 'T[0-9]{3}.*(Backend|Frontend|Mobile|API|Test|Review|Fix|Commit|Archive|Manager|Implementer|Agent|Designer)' "tasks.md tasks must include an owner or execution role"
 
   if [[ "$task_review_required" == "true" ]]; then
-    verify_review_gate "$dir/task-review.md" "task-review.md"
+    verify_review_gate "$dir/task-review.md" "task-review.md" "tasks"
   fi
 }
 
@@ -1004,6 +1157,7 @@ verify_stage_review() {
     verify_structured_record "$dir/implementation/review.md" "implementation/review.md"
     require_review_decision "$dir/implementation/review.md" "implementation/review.md"
     require_no_blocking_issues "$dir/implementation/review.md" "implementation/review.md"
+    require_review_isolation "$dir/implementation/review.md" "implementation/review.md" "implementation"
   fi
 }
 
@@ -1056,6 +1210,7 @@ run_verify_stage_checks() {
   local dir="$1"
   local stage="$2"
   VERIFY_ERRORS=()
+  VERIFY_WARNINGS=()
   case "$stage" in
     spec) verify_stage_spec "$dir" ;;
     plan) verify_stage_plan "$dir" ;;
@@ -1082,9 +1237,24 @@ verify_feature() {
 
   if [[ "${#VERIFY_ERRORS[@]}" -eq 0 ]]; then
     printf 'Verify passed for %s at stage %s\n' "$(basename "$dir")" "$stage"
+    if [[ "${#VERIFY_WARNINGS[@]}" -gt 0 ]]; then
+      printf 'Warnings:\n'
+      local warning
+      for warning in "${VERIFY_WARNINGS[@]}"; do
+        printf -- '- %s\n' "$warning"
+      done
+    fi
   else
     printf 'Verify failed for %s at stage %s\n' "$(basename "$dir")" "$stage" >&2
     printf '\n' >&2
+    if [[ "${#VERIFY_WARNINGS[@]}" -gt 0 ]]; then
+      printf 'Warnings:\n' >&2
+      local warning
+      for warning in "${VERIFY_WARNINGS[@]}"; do
+        printf -- '- %s\n' "$warning" >&2
+      done
+      printf '\n' >&2
+    fi
     local error
     for error in "${VERIFY_ERRORS[@]}"; do
       printf -- '- %s\n' "$error" >&2
@@ -1111,11 +1281,25 @@ gate_to_stage() {
     printf 'Feature: %s\n' "$(basename "$dir")"
     printf 'Target Stage: %s\n' "$target"
     printf 'Checked Stage: %s\n' "$gate_stage"
+    if [[ "${#VERIFY_WARNINGS[@]}" -gt 0 ]]; then
+      printf 'Warnings:\n'
+      local warning
+      for warning in "${VERIFY_WARNINGS[@]}"; do
+        printf -- '- %s\n' "$warning"
+      done
+    fi
   else
     printf 'Gate Decision: block\n' >&2
     printf 'Feature: %s\n' "$(basename "$dir")" >&2
     printf 'Target Stage: %s\n' "$target" >&2
     printf 'Checked Stage: %s\n' "$gate_stage" >&2
+    if [[ "${#VERIFY_WARNINGS[@]}" -gt 0 ]]; then
+      printf 'Warnings:\n' >&2
+      local warning
+      for warning in "${VERIFY_WARNINGS[@]}"; do
+        printf -- '- %s\n' "$warning" >&2
+      done
+    fi
     printf 'Blockers:\n' >&2
     local error
     for error in "${VERIFY_ERRORS[@]}"; do
@@ -1146,10 +1330,24 @@ gate_stage_status() {
     printf 'Gate Decision: pass\n'
     printf 'Feature: %s\n' "$(basename "$dir")"
     printf 'Stage: %s\n' "$stage"
+    if [[ "${#VERIFY_WARNINGS[@]}" -gt 0 ]]; then
+      printf 'Warnings:\n'
+      local warning
+      for warning in "${VERIFY_WARNINGS[@]}"; do
+        printf -- '- %s\n' "$warning"
+      done
+    fi
   else
     printf 'Gate Decision: block\n' >&2
     printf 'Feature: %s\n' "$(basename "$dir")" >&2
     printf 'Stage: %s\n' "$stage" >&2
+    if [[ "${#VERIFY_WARNINGS[@]}" -gt 0 ]]; then
+      printf 'Warnings:\n' >&2
+      local warning
+      for warning in "${VERIFY_WARNINGS[@]}"; do
+        printf -- '- %s\n' "$warning" >&2
+      done
+    fi
     printf 'Blockers:\n' >&2
     local error
     for error in "${VERIFY_ERRORS[@]}"; do
@@ -1910,6 +2108,10 @@ main() {
     board)
       shift
       handle_board_command "$@"
+      ;;
+    approve)
+      if [[ $# -lt 4 ]]; then usage; exit 1; fi
+      approve_feature_stage "$2" "$(parse_stage_flag "--stage" "${@:3}")"
       ;;
     check)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi

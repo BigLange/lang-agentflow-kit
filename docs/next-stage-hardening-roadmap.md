@@ -307,6 +307,9 @@ reviewed_at: 2026-05-27
 
 If metadata is missing or invalid, the gate must fail.
 
+- [x] `review.mode` is read from config.
+- [x] `separate-session` review metadata is checked by gates.
+
 ### `human`
 
 Human approval is required. Do not allow the AI to hand-write human sign-off.
@@ -326,6 +329,9 @@ approval_source: cli
 ```
 
 The gate checks this metadata.
+
+- [x] `agentflow approve FEATURE --stage <stage>` writes CLI approval metadata.
+- [x] `human` review mode requires CLI approval metadata.
 
 ## TODO 6: Do Not Do Yet
 
@@ -415,9 +421,9 @@ sequence.
 
 ### v0.6: Review Isolation
 
-- [ ] Support `review.mode`.
-- [ ] Support `separate-session` metadata.
-- [ ] Support `agentflow approve`.
+- [x] Support `review.mode`.
+- [x] Support `separate-session` metadata.
+- [x] Support `agentflow approve`.
 
 ## Final Principle
 

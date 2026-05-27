@@ -48,6 +48,16 @@ implementation:
     - frontend
     - mobile
 
+review:
+  spec:
+    mode: self
+  plan:
+    mode: self
+  tasks:
+    mode: self
+  implementation:
+    mode: self
+
 hooks:
   before_plan:
   before_tasks:
