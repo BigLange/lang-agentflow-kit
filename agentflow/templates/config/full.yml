@@ -37,6 +37,7 @@ runtime:
   active_context_markdown_file: active_context.md
   enforce_dispatch_gate: true
   enforce_archive_gate: true
+  require_reuse_gate_for_sensitive: true
   hook_failure_policy: stop
 
 workflow:

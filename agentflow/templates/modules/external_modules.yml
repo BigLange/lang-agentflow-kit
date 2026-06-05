@@ -1,0 +1,32 @@
+external_modules:
+  - id: public-admin-template
+    name: Public Admin Template
+    source_type: public
+    source: github:example/admin-template
+    module_type: template
+    domain: admin
+    risk_level: high
+    status: candidate
+    allowed_modes:
+      - reference-only
+    forbidden_modes:
+      - vendor
+      - direct-copy
+    notes:
+      - Use as UI and routing reference only
+      - Do not copy authentication or permission logic
+
+  - id: internal-user-module
+    name: Internal User Module
+    source_type: internal
+    source: git:ssh://company/user-module.git
+    module_type: internal-module
+    domain: user
+    risk_level: medium
+    status: approved
+    allowed_modes:
+      - dependency
+      - vendor
+    requires:
+      - version_lock
+      - integration_notes

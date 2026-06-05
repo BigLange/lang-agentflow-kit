@@ -9,12 +9,15 @@
   "files": [
     "bin/",
     "agentflow/",
+    "scripts/",
+    "tests/",
     "install.sh",
     "agentflow.config.yml"
   ],
   "scripts": {
-    "check": "bash -n bin/agentflow && bash -n install.sh && bash -n scripts/smoke.sh",
+    "check": "bash -n bin/agentflow && bash -n install.sh && bash -n scripts/smoke.sh && bash -n tests/smoke_external_modules.sh",
     "smoke": "bash scripts/smoke.sh",
+    "smoke:external-modules": "bash tests/smoke_external_modules.sh",
     "pack:check": "npm pack --dry-run"
   },
   "engines": {

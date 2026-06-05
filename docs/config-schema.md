@@ -28,6 +28,7 @@ runtime:
   active_context_markdown_file: active_context.md
   enforce_dispatch_gate: true
   enforce_archive_gate: true
+  require_reuse_gate_for_sensitive: true
   hook_failure_policy: stop
 
 workflow:
@@ -122,6 +123,11 @@ These keys are read by the current `bin/agentflow` runtime.
 - `runtime.enforce_archive_gate`
   Default: `true`
   If true, `feature archive` hard-checks the `archive` gate first.
+- `runtime.require_reuse_gate_for_sensitive`
+  Default: `true`
+  If true, sensitive workflows must pass the reuse gate before plan/implementation.
+  The current runtime also exposes `agentflow reuse analyze` and `agentflow reuse
+  gate` for manual use on any feature.
 - `runtime.hook_failure_policy`
   Default: `stop`
   Controls hook failure behavior.
@@ -241,8 +247,19 @@ they are migrated or explicitly edited.
 
 ### `external_module_policy`
 
-The current runtime treats this as governance metadata. It does not download,
-vendor, copy, or merge external modules.
+The project-local source of truth for external module governance lives under
+`.agentflow/modules/`:
+
+```text
+.agentflow/modules/external_modules.yml
+.agentflow/modules/external_module_policy.yml
+.agentflow/modules/MODULE_ID/module-contract.yml
+.agentflow/modules/MODULE_ID/security-notes.md
+.agentflow/modules/MODULE_ID/integration-notes.md
+```
+
+The current runtime treats this as static governance metadata. It does not
+download, vendor, copy, or merge external modules.
 
 Defaults:
 

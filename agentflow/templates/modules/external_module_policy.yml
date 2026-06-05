@@ -1,0 +1,25 @@
+external_module_policy:
+  public_default_mode: reference-only
+  public_vendor_allowed: false
+  public_direct_copy_allowed: false
+  require_license_check: true
+  require_maintenance_check: true
+  require_security_notes: true
+  require_human_approval_for_high_risk: true
+
+  sensitive_domains:
+    critical:
+      - auth
+      - user
+      - permission
+      - payment
+      - crypto
+      - file-upload
+      - admin-account
+      - tenant-isolation
+
+  default_rules:
+    - public + critical => reference-only
+    - public + vendor => block unless human-approved
+    - public + direct-copy => blocked
+    - internal + trusted => reusable with version lock

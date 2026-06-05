@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- External Module Governance registry under `.agentflow/modules/`.
+- `agentflow module list`, `show`, `add`, `contract`, and `approve`.
+- `agentflow reuse analyze` and `agentflow reuse gate`.
+- Static policy checks for public module direct-copy, public high-risk vendor,
+  and public critical-domain reuse.
+- Feature-level `reuse-analysis.md` and `external-module-risk.md` generation.
+- External module smoke test.
+
 ## 0.6.0 - 2026-06-05
 
 Engineering guardrail and state hardening release.

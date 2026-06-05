@@ -154,6 +154,10 @@ features/FEATURE-XXX/state.yml
 | `agentflow check FEATURE-001-user-auth` | Strictly check one feature for missing files/placeholders. |
 | `agentflow doctor` | Check local runtime health. |
 | `agentflow board render --check` | Verify the generated task board is fresh. |
+| `agentflow module list` | List registered external/internal modules. |
+| `agentflow module contract MODULE_ID` | Generate local contract and notes templates for a module. |
+| `agentflow reuse analyze FEATURE-001-user-auth` | Generate feature-level reuse analysis. |
+| `agentflow reuse gate FEATURE-001-user-auth` | Check external module reuse policy before implementation. |
 
 ## Init Profiles
 
@@ -183,6 +187,50 @@ Use smaller types for small work so the process does not become token-heavy.
 Use `major` or `sensitive` when correctness, security, permissions, payments,
 or external reuse risk matters.
 
+## External Module Governance
+
+AgentFlow can register and gate external modules without downloading or copying
+their code. Public modules are not trusted by default, and sensitive domains
+such as auth, user, permission, payment, crypto, file upload, admin accounts,
+and tenant isolation are treated as high risk.
+
+Typical flow:
+
+```sh
+agentflow module add public-admin-template \
+  --name "Public Admin Template" \
+  --source-type public \
+  --source github:example/admin-template \
+  --module-type template \
+  --domain admin \
+  --risk high \
+  --mode reference-only
+
+agentflow module contract public-admin-template
+agentflow reuse analyze FEATURE-001-admin-user-permission
+agentflow reuse gate FEATURE-001-admin-user-permission
+```
+
+Generated governance files:
+
+```text
+.agentflow/modules/external_modules.yml
+.agentflow/modules/external_module_policy.yml
+.agentflow/modules/MODULE_ID/module-contract.yml
+.agentflow/modules/MODULE_ID/security-notes.md
+.agentflow/modules/MODULE_ID/integration-notes.md
+features/FEATURE-XXX/reuse-analysis.md
+features/FEATURE-XXX/external-module-risk.md
+```
+
+Safety boundaries:
+
+- AgentFlow does not download public repositories.
+- AgentFlow does not copy or vendor public code automatically.
+- Public critical-domain modules are reference-only by default.
+- Public `direct-copy` is blocked.
+- Public high/critical `vendor` requires explicit human approval.
+
 ## Core Outputs
 
 Typical initialized project:
@@ -191,6 +239,9 @@ Typical initialized project:
 AGENTS.md
 agentflow.config.yml
 .agentflow/
+  modules/
+    external_modules.yml
+    external_module_policy.yml
 project-docs/
   00_PROJECT_CONTEXT.md
   01_ARCHITECTURE.md

@@ -17,6 +17,7 @@ CONFIG="$PROJECT_ROOT/agentflow.config.yml"
 FEATURE_DIR="$PROJECT_ROOT/features"
 DOCS_DIR="$PROJECT_ROOT/project-docs"
 STATE_DIR="$PROJECT_ROOT/.agentflow/state"
+MODULES_DIR="$PROJECT_ROOT/.agentflow/modules"
 ACTIVE_CONTEXT_FILE="active_context.json"
 ACTIVE_CONTEXT_MD_FILE="active_context.md"
 TEMPLATE_DIR="$PACKAGE_ROOT/agentflow/templates"
@@ -49,6 +50,13 @@ Advanced feature commands:
   bin/agentflow install-hooks
   bin/agentflow init-ci github
   bin/agentflow init-rules cursor|cline|codex|all
+  bin/agentflow module list
+  bin/agentflow module show MODULE_ID
+  bin/agentflow module add MODULE_ID --name NAME --source-type public|internal|third-party --source SOURCE --module-type TYPE --domain DOMAIN --risk low|medium|high|critical --mode reference-only|dependency|vendor|direct-copy
+  bin/agentflow module contract MODULE_ID
+  bin/agentflow module approve MODULE_ID --mode reference-only|dependency|vendor|direct-copy [--human-approved] [--approved-by NAME]
+  bin/agentflow reuse analyze FEATURE-001-title
+  bin/agentflow reuse gate FEATURE-001-title
   bin/agentflow approve FEATURE-001-title --stage spec|plan|tasks|implementation
 
 Legacy aliases:
@@ -652,6 +660,609 @@ yaml_quote() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/'
 }
 
+modules_registry_file() {
+  printf '%s/external_modules.yml' "$MODULES_DIR"
+}
+
+modules_policy_file() {
+  printf '%s/external_module_policy.yml' "$MODULES_DIR"
+}
+
+ensure_modules_state() {
+  mkdir -p "$MODULES_DIR"
+  if [[ ! -f "$(modules_registry_file)" ]]; then
+    cp "$TEMPLATE_DIR/modules/external_modules.yml" "$(modules_registry_file)"
+  fi
+  if [[ ! -f "$(modules_policy_file)" ]]; then
+    cp "$TEMPLATE_DIR/modules/external_module_policy.yml" "$(modules_policy_file)"
+  fi
+}
+
+clean_yaml_scalar() {
+  sed -E 's/^[^:]+:[[:space:]]*//; s/^"//; s/"$//'
+}
+
+valid_usage_mode() {
+  case "$1" in
+    reference-only|dependency|vendor|direct-copy) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_critical_domain() {
+  case "$1" in
+    auth|user|permission|payment|crypto|file-upload|admin-account|tenant-isolation) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+feature_mentions_sensitive_domain() {
+  local text="$1"
+  printf '%s' "$text" | grep -Eiq 'auth|login|user|permission|role|payment|crypto|file[ -]?upload|admin|tenant|token|password'
+}
+
+module_exists() {
+  local module_id="$1"
+  ensure_modules_state
+  awk -v target="$module_id" '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ {
+      if (clean($0) == target) found = 1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$(modules_registry_file)"
+}
+
+module_field_value() {
+  local module_id="$1"
+  local key="$2"
+  ensure_modules_state
+  awk -v target="$module_id" -v key="$key" '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ {
+      in_target = (clean($0) == target)
+      next
+    }
+    in_target && $0 ~ "^    " key ":" {
+      print clean($0)
+      exit
+    }
+  ' "$(modules_registry_file)"
+}
+
+module_list_values() {
+  local module_id="$1"
+  local key="$2"
+  ensure_modules_state
+  awk -v target="$module_id" -v key="$key" '
+    function clean_item(value) {
+      sub(/^[[:space:]]*-[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ {
+      in_target = (clean($0) == target)
+      in_list = 0
+      next
+    }
+    in_target && $0 ~ "^    " key ":" {
+      in_list = 1
+      next
+    }
+    in_target && in_list && $0 ~ /^      - / {
+      print clean_item($0)
+      next
+    }
+    in_target && in_list && $0 ~ /^    [A-Za-z0-9_-]+:/ {
+      exit
+    }
+  ' "$(modules_registry_file)"
+}
+
+module_requested_mode() {
+  local module_id="$1"
+  local requested approved first_allowed
+  requested="$(module_field_value "$module_id" "requested_mode")"
+  approved="$(module_field_value "$module_id" "approved_mode")"
+  first_allowed="$(module_list_values "$module_id" "allowed_modes" | head -1)"
+  printf '%s' "${requested:-${approved:-$first_allowed}}"
+}
+
+print_module_block() {
+  local module_id="$1"
+  ensure_modules_state
+  awk -v target="$module_id" '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ {
+      if (printing) exit
+      printing = (clean($0) == target)
+    }
+    printing { print }
+  ' "$(modules_registry_file)"
+}
+
+module_list() {
+  ensure_modules_state
+  printf '| ID | Name | Source Type | Module Type | Domain | Risk | Status | Allowed Modes |\n'
+  printf '| --- | --- | --- | --- | --- | --- | --- | --- |\n'
+  awk '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    function flush() {
+      if (id == "") return
+      printf("| %s | %s | %s | %s | %s | %s | %s | %s |\n",
+        id, name, source_type, module_type, domain, risk_level, status, allowed_modes)
+    }
+    /^  - id:/ {
+      flush()
+      id = clean($0)
+      name = source_type = module_type = domain = risk_level = status = allowed_modes = ""
+      in_allowed = 0
+      next
+    }
+    /^[[:space:]]+name:/ { name = clean($0); next }
+    /^[[:space:]]+source_type:/ { source_type = clean($0); next }
+    /^[[:space:]]+module_type:/ { module_type = clean($0); next }
+    /^[[:space:]]+domain:/ { domain = clean($0); next }
+    /^[[:space:]]+risk_level:/ { risk_level = clean($0); next }
+    /^[[:space:]]+status:/ { status = clean($0); next }
+    /^[[:space:]]+allowed_modes:/ { in_allowed = 1; next }
+    in_allowed && /^[[:space:]]+- / {
+      item = $0
+      sub(/^[[:space:]]*-[[:space:]]*/, "", item)
+      allowed_modes = allowed_modes == "" ? item : allowed_modes "," item
+      next
+    }
+    in_allowed && /^[[:space:]]+[A-Za-z0-9_-]+:/ { in_allowed = 0 }
+    END { flush() }
+  ' "$(modules_registry_file)"
+}
+
+module_show() {
+  local module_id="$1"
+  if ! module_exists "$module_id"; then
+    printf 'Unknown module: %s\n' "$module_id" >&2
+    exit 1
+  fi
+  print_module_block "$module_id"
+}
+
+module_add() {
+  local module_id="$1"
+  shift || true
+  local name="" source_type="" source="" module_type="" domain="" risk="" mode="" allowed_mode forbidden_vendor="false"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name) name="$2"; shift 2 ;;
+      --source-type) source_type="$2"; shift 2 ;;
+      --source) source="$2"; shift 2 ;;
+      --module-type) module_type="$2"; shift 2 ;;
+      --domain) domain="$2"; shift 2 ;;
+      --risk) risk="$2"; shift 2 ;;
+      --mode) mode="$2"; shift 2 ;;
+      *)
+        printf 'Unknown module add option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  [[ -n "$module_id" && -n "$name" && -n "$source_type" && -n "$source" && -n "$module_type" && -n "$domain" && -n "$risk" && -n "$mode" ]] || {
+    printf 'Missing required module add fields\n' >&2
+    exit 1
+  }
+  valid_usage_mode "$mode" || { printf 'Unsupported usage mode: %s\n' "$mode" >&2; exit 1; }
+  ensure_modules_state
+  if module_exists "$module_id"; then
+    printf 'Module already exists: %s\n' "$module_id"
+    printf 'Keeping existing registration. Use module show to inspect it.\n'
+    return
+  fi
+
+  allowed_mode="$mode"
+  if [[ "$source_type" == "public" ]] && is_critical_domain "$domain"; then
+    allowed_mode="reference-only"
+    if [[ "$mode" == "vendor" || "$mode" == "direct-copy" ]]; then
+      printf 'WARNING: public + critical domain defaults to reference-only; requested mode %s requires approval or is blocked by policy.\n' "$mode" >&2
+    fi
+  elif [[ "$source_type" == "public" && "$mode" == "direct-copy" ]]; then
+    allowed_mode="reference-only"
+    printf 'WARNING: public direct-copy is blocked by default; storing module as reference-only candidate.\n' >&2
+  fi
+
+  {
+    printf '\n'
+    printf '  - id: %s\n' "$module_id"
+    printf '    name: %s\n' "$name"
+    printf '    source_type: %s\n' "$source_type"
+    printf '    source: %s\n' "$source"
+    printf '    module_type: %s\n' "$module_type"
+    printf '    domain: %s\n' "$domain"
+    printf '    risk_level: %s\n' "$risk"
+    printf '    status: candidate\n'
+    printf '    requested_mode: %s\n' "$mode"
+    printf '    allowed_modes:\n'
+    printf '      - %s\n' "$allowed_mode"
+    printf '    forbidden_modes:\n'
+    [[ "$allowed_mode" != "vendor" ]] && printf '      - vendor\n'
+    printf '      - direct-copy\n'
+    printf '    notes:\n'
+    printf '      - Registered by agentflow module add\n'
+    printf '      - No source was downloaded or copied\n'
+  } >> "$(modules_registry_file)"
+
+  printf 'Registered module: %s\n' "$module_id"
+}
+
+module_contract() {
+  local module_id="$1"
+  local dir contract security integration
+  if ! module_exists "$module_id"; then
+    printf 'Unknown module: %s\n' "$module_id" >&2
+    exit 1
+  fi
+  dir="$MODULES_DIR/$module_id"
+  mkdir -p "$dir"
+  contract="$dir/module-contract.yml"
+  security="$dir/security-notes.md"
+  integration="$dir/integration-notes.md"
+  {
+    printf 'id: %s\n' "$module_id"
+    printf 'name: %s\n' "$(module_field_value "$module_id" "name")"
+    printf 'source: %s\n' "$(module_field_value "$module_id" "source")"
+    printf 'source_type: %s\n' "$(module_field_value "$module_id" "source_type")"
+    printf 'module_type: %s\n' "$(module_field_value "$module_id" "module_type")"
+    printf 'domain: %s\n' "$(module_field_value "$module_id" "domain")"
+    printf 'risk_level: %s\n' "$(module_field_value "$module_id" "risk_level")"
+    printf 'status: %s\n\n' "$(module_field_value "$module_id" "status")"
+    printf 'capabilities:\n  - TBD\n\n'
+    printf 'public_contract:\n'
+    printf '  api:\n    - TBD\n'
+    printf '  routes:\n    - TBD\n'
+    printf '  concepts:\n    - TBD\n\n'
+    printf 'allowed_usage:\n'
+    module_list_values "$module_id" "allowed_modes" | sed 's/^/  - /'
+    printf '\nforbidden_usage:\n'
+    module_list_values "$module_id" "forbidden_modes" | sed 's/^/  - /'
+    printf '\nsecurity_notes:\n  - TBD\n\n'
+    printf 'integration_notes:\n  - TBD\n'
+  } > "$contract"
+  {
+    printf '# Security Notes: %s\n\n' "$module_id"
+    printf 'No remote repository was downloaded or scanned by AgentFlow.\n\n'
+    printf '## Required Checks\n\n'
+    printf -- '- License check: TBD\n'
+    printf -- '- Maintenance check: TBD\n'
+    printf -- '- Sensitive domain review: TBD\n'
+  } > "$security"
+  {
+    printf '# Integration Notes: %s\n\n' "$module_id"
+    printf 'Document version lock, import boundary, adapter code, and replacement plan before using this module beyond reference-only.\n\n'
+    printf '## Notes\n\n- TBD\n'
+  } > "$integration"
+  printf 'Generated module contract files:\n'
+  printf '  %s\n' "$contract"
+  printf '  %s\n' "$security"
+  printf '  %s\n' "$integration"
+}
+
+rewrite_module_status() {
+  local module_id="$1"
+  local mode="$2"
+  local approved_by="$3"
+  local approved_at="$4"
+  local registry tmp_file
+  registry="$(modules_registry_file)"
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-modules.XXXXXX")"
+  awk -v target="$module_id" -v mode="$mode" -v approved_by="$approved_by" -v approved_at="$approved_at" '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ {
+      in_target = (clean($0) == target)
+      print
+      next
+    }
+    in_target && /^    status:/ { print "    status: approved"; next }
+    in_target && /^    approved_mode:/ { next }
+    in_target && /^    approved_by:/ { next }
+    in_target && /^    approved_at:/ { next }
+    in_target && /^    notes:/ {
+        print "    approved_mode: " mode
+        print "    approved_by: " approved_by
+        print "    approved_at: " approved_at
+        print
+        next
+    }
+    {
+      print
+    }
+  ' "$registry" > "$tmp_file"
+  mv "$tmp_file" "$registry"
+}
+
+module_approve() {
+  local module_id="$1"
+  shift || true
+  local mode="" human_approved="false" approved_by="local-user" source_type domain risk approved_at
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --mode) mode="$2"; shift 2 ;;
+      --human-approved) human_approved="true"; shift ;;
+      --approved-by) approved_by="$2"; shift 2 ;;
+      *)
+        printf 'Unknown module approve option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+  [[ -n "$mode" ]] || { printf 'Missing --mode for module approve\n' >&2; exit 1; }
+  valid_usage_mode "$mode" || { printf 'Unsupported usage mode: %s\n' "$mode" >&2; exit 1; }
+  module_exists "$module_id" || { printf 'Unknown module: %s\n' "$module_id" >&2; exit 1; }
+
+  source_type="$(module_field_value "$module_id" "source_type")"
+  domain="$(module_field_value "$module_id" "domain")"
+  risk="$(module_field_value "$module_id" "risk_level")"
+
+  if [[ "$source_type" == "public" && "$mode" == "direct-copy" ]]; then
+    printf 'BLOCKED: public modules cannot be approved for direct-copy.\n' >&2
+    exit 1
+  fi
+  if [[ "$source_type" == "public" ]] && is_critical_domain "$domain" && [[ "$mode" == "vendor" ]]; then
+    printf 'BLOCKED: public + critical domain + vendor is blocked by default. Use reference-only or an internal/trusted module.\n' >&2
+    exit 1
+  fi
+  if [[ "$source_type" == "public" && "$mode" == "vendor" && ( "$risk" == "high" || "$risk" == "critical" ) && "$human_approved" != "true" ]]; then
+    printf 'BLOCKED: public high/critical vendor requires --human-approved.\n' >&2
+    exit 1
+  fi
+  if [[ "$source_type" == "internal" && "$mode" == "vendor" ]]; then
+    printf 'WARNING: internal vendor approval requires version_lock and integration_notes.\n' >&2
+  fi
+
+  approved_at="$(date +%Y-%m-%dT%H:%M:%S%z)"
+  rewrite_module_status "$module_id" "$mode" "$approved_by" "$approved_at"
+  printf 'Approved module %s for mode %s by %s\n' "$module_id" "$mode" "$approved_by"
+}
+
+module_ids() {
+  ensure_modules_state
+  awk '
+    function clean(value) {
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      return value
+    }
+    /^  - id:/ { print clean($0) }
+  ' "$(modules_registry_file)"
+}
+
+feature_text_for_reuse() {
+  local dir="$1"
+  {
+    basename "$dir"
+    [[ -f "$dir/spec.md" ]] && cat "$dir/spec.md"
+    [[ -f "$dir/plan.md" ]] && cat "$dir/plan.md"
+    [[ -f "$dir/tasks.md" ]] && cat "$dir/tasks.md"
+  } 2>/dev/null
+}
+
+module_matches_feature() {
+  local module_id="$1"
+  local feature_text="$2"
+  local domain module_type name
+  domain="$(module_field_value "$module_id" "domain")"
+  module_type="$(module_field_value "$module_id" "module_type")"
+  name="$(module_field_value "$module_id" "name")"
+  if printf '%s' "$feature_text" | grep -Eiq "$domain|$module_type|$module_id|$name"; then
+    return 0
+  fi
+  if feature_mentions_sensitive_domain "$feature_text" && is_critical_domain "$domain"; then
+    return 0
+  fi
+  if printf '%s' "$feature_text" | grep -Eiq 'admin' && [[ "$domain" == "admin" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+recommended_mode_for_module() {
+  local module_id="$1"
+  local source_type domain risk
+  source_type="$(module_field_value "$module_id" "source_type")"
+  domain="$(module_field_value "$module_id" "domain")"
+  risk="$(module_field_value "$module_id" "risk_level")"
+  if [[ "$source_type" == "public" ]] && { is_critical_domain "$domain" || [[ "$risk" == "high" || "$risk" == "critical" ]]; }; then
+    printf 'reference-only'
+  else
+    module_list_values "$module_id" "allowed_modes" | head -1
+  fi
+}
+
+reuse_analyze() {
+  local feature="$1"
+  local dir feature_name feature_text analysis risk_file module_id matched=0 sensitive_domains=""
+  dir="$(feature_path "$feature")"
+  feature_name="$(basename "$dir")"
+  ensure_modules_state
+  feature_text="$(feature_text_for_reuse "$dir")"
+  analysis="$dir/reuse-analysis.md"
+  risk_file="$dir/external-module-risk.md"
+
+  {
+    printf '# Reuse Analysis\n\n'
+    printf 'Feature: %s\n\n' "$feature_name"
+    printf '## Status\n\nStatus: complete\n\n'
+    printf '## Candidate Modules\n\n'
+    while IFS= read -r module_id; do
+      [[ -z "$module_id" ]] && continue
+      if module_matches_feature "$module_id" "$feature_text"; then
+        matched=1
+        printf '### %s\n\n' "$module_id"
+        printf -- '- Source Type: %s\n' "$(module_field_value "$module_id" "source_type")"
+        printf -- '- Module Type: %s\n' "$(module_field_value "$module_id" "module_type")"
+        printf -- '- Domain: %s\n' "$(module_field_value "$module_id" "domain")"
+        printf -- '- Risk Level: %s\n' "$(module_field_value "$module_id" "risk_level")"
+        printf -- '- Recommended Mode: %s\n' "$(recommended_mode_for_module "$module_id")"
+        printf -- '- Requested Mode: %s\n' "$(module_requested_mode "$module_id")"
+        printf -- '- Reason:\n'
+        printf '  - This feature appears related to `%s` or nearby sensitive concepts.\n' "$(module_field_value "$module_id" "domain")"
+        printf '  - Public code should not be directly copied.\n\n'
+      fi
+    done < <(module_ids)
+    if [[ "$matched" -eq 0 ]]; then
+      printf 'No registered candidate modules matched this feature.\n\n'
+    fi
+    printf '## Decision\n\n'
+    printf -- '- Use matching public modules as reference-only unless an explicit approval allows another mode.\n'
+    printf -- '- Do not vendor authentication, permission, payment, token, password, or role-check logic from public repositories.\n'
+    printf -- '- Human approval required before using any public high-risk module as dependency or vendor.\n'
+  } > "$analysis"
+
+  {
+    printf '# External Module Risk\n\n'
+    printf 'Feature: %s\n\n' "$feature_name"
+    printf '## Status\n\nStatus: complete\n\n'
+    printf '## Risk Summary\n\n'
+    if feature_mentions_sensitive_domain "$feature_text"; then
+      printf 'This feature may involve sensitive domains:\n\n'
+      printf -- '- user\n'
+      printf -- '- permission\n'
+      printf -- '- admin-account\n'
+      printf -- '- auth/login/token/password, if present in implementation scope\n\n'
+      printf 'human_approval_required: true\n\n'
+    else
+      printf 'No sensitive domain keywords were detected in the current feature text.\n\n'
+      printf 'human_approval_required: false\n\n'
+    fi
+    printf '## Policy\n\n'
+    printf 'Public modules in sensitive domains are reference-only by default.\n\n'
+    printf '## Blocked Actions\n\n'
+    printf -- '- direct-copy public auth code\n'
+    printf -- '- vendor public permission module without human approval\n'
+    printf -- '- copy token / password / role-check logic from public repositories\n'
+  } > "$risk_file"
+
+  printf 'Wrote reuse analysis: %s\n' "$analysis"
+  printf 'Wrote external module risk: %s\n' "$risk_file"
+}
+
+analysis_references_module() {
+  local analysis="$1"
+  local module_id="$2"
+  grep -Eq "^###[[:space:]]+$module_id$" "$analysis"
+}
+
+reuse_gate_check() {
+  local feature="$1"
+  local dir feature_name analysis risk_file feature_text module_id failed=0
+  local source_type domain risk requested_mode approved_mode status contract integration
+  dir="$(feature_path "$feature")"
+  feature_name="$(basename "$dir")"
+  analysis="$dir/reuse-analysis.md"
+  risk_file="$dir/external-module-risk.md"
+  ensure_modules_state
+
+  if [[ ! -f "$analysis" ]]; then
+    printf 'BLOCKED: missing reuse analysis: %s\n' "$analysis" >&2
+    return 1
+  fi
+  if [[ ! -f "$risk_file" ]]; then
+    printf 'BLOCKED: missing external module risk file: %s\n' "$risk_file" >&2
+    return 1
+  fi
+
+  feature_text="$(feature_text_for_reuse "$dir")"
+  if feature_mentions_sensitive_domain "$feature_text" && ! grep -Eq '^human_approval_required:[[:space:]]*true' "$risk_file"; then
+    printf 'BLOCKED: sensitive feature requires human_approval_required: true in external-module-risk.md\n' >&2
+    failed=1
+  fi
+
+  while IFS= read -r module_id; do
+    [[ -z "$module_id" ]] && continue
+    analysis_references_module "$analysis" "$module_id" || continue
+    source_type="$(module_field_value "$module_id" "source_type")"
+    domain="$(module_field_value "$module_id" "domain")"
+    risk="$(module_field_value "$module_id" "risk_level")"
+    requested_mode="$(module_requested_mode "$module_id")"
+    approved_mode="$(module_field_value "$module_id" "approved_mode")"
+    status="$(module_field_value "$module_id" "status")"
+    contract="$MODULES_DIR/$module_id/module-contract.yml"
+    integration="$MODULES_DIR/$module_id/integration-notes.md"
+
+    if [[ "$source_type" == "public" && "$requested_mode" == "direct-copy" ]]; then
+      printf 'BLOCKED: public module %s requested direct-copy, which is forbidden.\n' "$module_id" >&2
+      failed=1
+    fi
+    if [[ "$source_type" == "public" ]] && is_critical_domain "$domain" && [[ "$requested_mode" != "reference-only" ]]; then
+      printf 'BLOCKED: public module %s is critical risk. domain=%s requested_mode=%s allowed=reference-only.\n' "$module_id" "$domain" "$requested_mode" >&2
+      failed=1
+    fi
+    if [[ "$source_type" == "public" && "$requested_mode" == "vendor" && ( "$risk" == "high" || "$risk" == "critical" ) && "$status" != "approved" ]]; then
+      printf 'BLOCKED: public high/critical vendor module %s requires human approval.\n' "$module_id" >&2
+      failed=1
+    fi
+    if [[ "$source_type" == "public" && "$requested_mode" == "vendor" && ( "$risk" == "high" || "$risk" == "critical" ) && "$approved_mode" != "vendor" ]]; then
+      printf 'BLOCKED: module %s is not approved for vendor mode.\n' "$module_id" >&2
+      failed=1
+    fi
+    if [[ "$source_type" == "internal" && "$status" == "approved" ]]; then
+      if [[ ! -f "$contract" || ! -f "$integration" ]]; then
+        printf 'WARNING: approved internal module %s should still document version lock and integration notes.\n' "$module_id" >&2
+      fi
+    elif [[ "$source_type" == "public" || "$requested_mode" != "reference-only" ]]; then
+      if [[ ! -f "$contract" ]]; then
+        printf 'BLOCKED: missing module contract for %s: %s\n' "$module_id" "$contract" >&2
+        failed=1
+      fi
+      if [[ ! -f "$integration" ]]; then
+        printf 'BLOCKED: missing integration notes for %s: %s\n' "$module_id" "$integration" >&2
+        failed=1
+      fi
+    fi
+  done < <(module_ids)
+
+  if [[ "$failed" -eq 0 ]]; then
+    printf 'PASS: reuse gate passed for %s\n' "$feature_name"
+    return 0
+  fi
+  return 1
+}
+
+reuse_gate() {
+  reuse_gate_check "$1"
+}
+
 ensure_features_state() {
   local state_file
   state_file="$(state_features_file)"
@@ -920,7 +1531,8 @@ ensure_runtime_dirs() {
     "$DOCS_DIR/records/review" \
     "$DOCS_DIR/records/test" \
     "$DOCS_DIR/subagent" \
-    "$STATE_DIR"
+    "$STATE_DIR" \
+    "$MODULES_DIR"
 
   if [[ ! -f "$DOCS_DIR/00_PROJECT_CONTEXT.md" ]]; then
     cp "$TEMPLATE_DIR/project-docs/00_PROJECT_CONTEXT.md" "$DOCS_DIR/00_PROJECT_CONTEXT.md"
@@ -939,6 +1551,14 @@ ensure_runtime_dirs() {
   fi
 
   ensure_features_state
+
+  if [[ ! -f "$MODULES_DIR/external_modules.yml" ]]; then
+    cp "$TEMPLATE_DIR/modules/external_modules.yml" "$MODULES_DIR/external_modules.yml"
+  fi
+
+  if [[ ! -f "$MODULES_DIR/external_module_policy.yml" ]]; then
+    cp "$TEMPLATE_DIR/modules/external_module_policy.yml" "$MODULES_DIR/external_module_policy.yml"
+  fi
 }
 
 init_project() {
@@ -951,6 +1571,7 @@ init_project() {
     "$PROJECT_ROOT/.agentflow/templates" \
     "$PROJECT_ROOT/.agentflow/integrations" \
     "$PROJECT_ROOT/.agentflow/records" \
+    "$PROJECT_ROOT/.agentflow/modules" \
     "$STATE_DIR"
 
   if [[ ! -f "$PROJECT_ROOT/AGENTS.md" ]]; then
@@ -1467,6 +2088,9 @@ verify_stage_reuse_risk() {
   verify_structured_record "$dir/reuse-analysis.md" "reuse-analysis.md"
   verify_structured_record "$dir/external-module-risk.md" "external-module-risk.md"
   require_line_match "$dir/external-module-risk.md" '^human_approval_required:[[:space:]]*true' "external-module-risk.md must require human approval for sensitive reuse"
+  if ! reuse_gate_check "$(basename "$dir")" >/dev/null 2>&1; then
+    add_verify_error "reuse gate must pass before continuing: $dir"
+  fi
 }
 
 effective_key_files() {
@@ -2435,6 +3059,55 @@ handle_board_command() {
   esac
 }
 
+handle_module_command() {
+  local subcommand="${1:-}"
+  shift || true
+  case "$subcommand" in
+    list)
+      module_list
+      ;;
+    show)
+      [[ $# -ge 1 ]] || { usage; exit 1; }
+      module_show "$1"
+      ;;
+    add)
+      [[ $# -ge 1 ]] || { usage; exit 1; }
+      module_add "$@"
+      ;;
+    contract)
+      [[ $# -ge 1 ]] || { usage; exit 1; }
+      module_contract "$1"
+      ;;
+    approve)
+      [[ $# -ge 1 ]] || { usage; exit 1; }
+      module_approve "$@"
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+handle_reuse_command() {
+  local subcommand="${1:-}"
+  shift || true
+  case "$subcommand" in
+    analyze)
+      [[ $# -ge 1 ]] || { usage; exit 1; }
+      reuse_analyze "$1"
+      ;;
+    gate)
+      [[ $# -ge 1 ]] || { usage; exit 1; }
+      reuse_gate "$1"
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 sync_tasks_for_feature() {
   local dir tasks_file current_stage tmp_file changes=0
   dir="$(feature_path "$1")"
@@ -2558,7 +3231,9 @@ doctor_check() {
     "$TEMPLATE_DIR/project/AGENTS.md" \
     "$TEMPLATE_DIR/project-docs/03_TASK_BOARD.md" \
     "$TEMPLATE_DIR/feature/archive.md" \
-    "$TEMPLATE_DIR/feature/implementation-api.md"; do
+    "$TEMPLATE_DIR/feature/implementation-api.md" \
+    "$TEMPLATE_DIR/modules/external_modules.yml" \
+    "$TEMPLATE_DIR/modules/external_module_policy.yml"; do
     [[ -f "$required_template" ]] && printf 'OK template: %s\n' "$required_template" || { printf 'FAIL missing template: %s\n' "$required_template" >&2; failed=1; }
   done
 
@@ -2744,6 +3419,14 @@ main() {
     board)
       shift
       handle_board_command "$@"
+      ;;
+    module)
+      shift
+      handle_module_command "$@"
+      ;;
+    reuse)
+      shift
+      handle_reuse_command "$@"
       ;;
     state)
       if [[ "${2:-}" == "migrate" ]]; then
