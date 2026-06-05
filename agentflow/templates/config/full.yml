@@ -39,6 +39,9 @@ runtime:
   enforce_archive_gate: true
   hook_failure_policy: stop
 
+workflow:
+  default_type: standard
+
 implementation:
   target_sides:
     - backend
@@ -82,3 +85,18 @@ gates:
   require_tests_before_done: true
   require_review_before_commit: true
   require_archive_before_done: true
+
+external_module_policy:
+  public_default_mode: reference-only
+  public_vendor_allowed: false
+  sensitive_domains:
+    critical:
+      - auth
+      - user
+      - permission
+      - payment
+      - crypto
+      - file-upload
+      - admin-account
+
+external_modules: []

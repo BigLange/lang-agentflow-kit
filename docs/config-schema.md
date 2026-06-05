@@ -30,6 +30,9 @@ runtime:
   enforce_archive_gate: true
   hook_failure_policy: stop
 
+workflow:
+  default_type: standard
+
 hooks:
   before_dispatch:
     - bin/agentflow feature status {{FEATURE}}
@@ -52,6 +55,31 @@ implementation:
     - backend
     - frontend
     - mobile
+
+external_module_policy:
+  public_default_mode: reference-only
+  public_vendor_allowed: false
+  sensitive_domains:
+    critical:
+      - auth
+      - user
+      - permission
+      - payment
+      - crypto
+      - file-upload
+      - admin-account
+
+external_modules:
+  - id: public-admin-template
+    source_type: public
+    source: github:xxx/admin-template
+    domain: auth
+    risk_level: critical
+    allowed_modes:
+      - reference-only
+    forbidden_modes:
+      - vendor
+      - direct-copy
 ```
 
 ## Runtime-Read Keys
@@ -185,6 +213,44 @@ runtime simple and easy to parse from shell.
 
   This project will not generate or require `results/frontend.md` or
   `results/mobile.md`.
+
+### `workflow`
+
+- `workflow.default_type`
+  Default: `standard`
+  Used by `agentflow feature create` when `--type` is omitted.
+
+Supported feature types and stage lists:
+
+```yaml
+trivial:
+  stages: [implement, archive]
+bug:
+  stages: [implement, test, archive]
+standard:
+  stages: [spec, plan, tasks, implement, test, archive]
+major:
+  stages: [spec, plan, tasks, dispatch, implement, test, review, fix, archive]
+sensitive:
+  stages: [spec, reuse-risk, plan, tasks, dispatch, implement, security-review, test, review, fix, archive]
+```
+
+Legacy feature bundles without `state.yml` or without `type` are treated as
+`major` so existing 0.5.0 projects keep their previous heavy workflow until
+they are migrated or explicitly edited.
+
+### `external_module_policy`
+
+The current runtime treats this as governance metadata. It does not download,
+vendor, copy, or merge external modules.
+
+Defaults:
+
+- Public modules default to `reference-only`.
+- Public vendor/direct-copy is forbidden unless a human explicitly approves an
+  exception outside the automated flow.
+- Critical sensitive domains include auth, user, permission, payment, crypto,
+  file-upload, and admin-account.
 
 ### `review`
 

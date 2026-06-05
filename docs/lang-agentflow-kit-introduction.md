@@ -30,10 +30,10 @@ features/
 - Markdown 协议层：`AGENTS.md`、`project-docs/`、feature bundle 和 records。
 - 轻量 runtime 守卫层：`agentflow feature verify`、`gate`、`context`、`next` 和 `status`。
 
-当前 `0.5.0` 版本完成了一轮 hardening：YAML 配置开始真正控制生成和检查，gate
-语义更清晰，active context 更适合长任务交接，任务板改为由 state 渲染，并加入了
-review isolation。也就是说，AgentFlow 不再只是生成 Markdown 模板，而是在保留
-Markdown 灵活性的前提下，把关键流程变成可执行、可检查、可交接的本地协议。
+当前 `0.6.0` 版本继续推进工程守卫能力：feature state 已下沉到各 feature 目录，
+任务板成为可重建的生成文件，并补充了 dynamic workflow、doctor、CI/hooks/rules
+入口和外部模块准入治理。也就是说，AgentFlow 不再只是生成 Markdown 模板，而是在
+保留 Markdown 灵活性的前提下，把关键流程变成可执行、可检查、可交接的本地协议。
 
 ## 安装方式
 

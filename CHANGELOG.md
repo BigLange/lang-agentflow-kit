@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.0 - 2026-06-05
+
+Engineering guardrail and state hardening release.
+
+### Added
+
+- Per-feature state files at `features/FEATURE-XXX/state.yml`.
+- `agentflow state migrate` to split legacy global feature state into feature-local state files.
+- Generated task board header and `agentflow board render --check`.
+- Feature types for dynamic workflows: `trivial`, `bug`, `standard`, `major`, and `sensitive`.
+- `agentflow doctor` for local runtime and project health checks.
+- `agentflow check --all` for CI-friendly project health checks.
+- Warning-mode `agentflow install-hooks` for Git pre-commit and pre-push hooks.
+- `agentflow init-ci github` for GitHub Actions guardrail workflow generation.
+- `agentflow init-rules cursor|cline|codex|all` for IDE/agent rule files.
+- External module governance templates for sensitive feature reuse review.
+- `agentflow --version` and `agentflow version`, sourced from `package.json`.
+- Smoke test script for initialization, feature creation, board freshness, context, gate, and doctor checks.
+
+### Changed
+
+- `project-docs/03_TASK_BOARD.md` is now generated from feature-local state.
+- `.agentflow/state/features.yml` is no longer the canonical source of truth.
+- `agentflow check --all` now performs stage-aware health checks instead of failing draft features for placeholders.
+- `agentflow init` no longer overwrites existing config unless `--force` is used.
+- README was rewritten as a concise open-source entry document with quick start, platform support, limitations, and docs links.
+
 ## 0.5.0 - 2026-05-27
 
 Review isolation hardening release.

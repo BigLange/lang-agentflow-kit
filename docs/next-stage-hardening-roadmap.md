@@ -1,7 +1,7 @@
 # Next-Stage Hardening Roadmap
 
-This roadmap captures the next optimization stage after the `0.2.0` runtime
-guardrails release.
+This roadmap captures the hardening path that started after the `0.2.0` runtime
+guardrails release and has since shipped through `0.6.0`.
 
 The goal is not to add more concepts, roles, or templates. The goal is to make
 the existing protocol harder to bypass:
@@ -390,9 +390,8 @@ Tool code should upgrade with `lang-agentflow-kit` itself.
 
 ## Recommended Version Route
 
-The current released version is `0.2.0`, so the original external suggestion of
-"v0.2: YAML truly controls execution" is re-mapped to the next patch/minor
-sequence.
+The current released version is `0.6.0`. The older "v0.2: YAML truly controls
+execution" notes below are preserved as historical route planning.
 
 ### v0.2.x: YAML Truly Controls Execution
 
