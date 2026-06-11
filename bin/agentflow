@@ -1550,6 +1550,10 @@ ensure_runtime_dirs() {
     cp "$TEMPLATE_DIR/project-docs/02_API_SPEC.md" "$DOCS_DIR/02_API_SPEC.md"
   fi
 
+  if [[ ! -f "$DOCS_DIR/ACTIVE_WORK.md" ]]; then
+    cp "$TEMPLATE_DIR/project-docs/ACTIVE_WORK.md" "$DOCS_DIR/ACTIVE_WORK.md"
+  fi
+
   ensure_features_state
 
   if [[ ! -f "$MODULES_DIR/external_modules.yml" ]]; then

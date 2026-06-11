@@ -22,7 +22,8 @@ features/
 
 - `AGENTS.md` 是 AI 的入口规则文件，定义角色、边界和协作原则。
 - `.agentflow/` 存放角色定义、模板、skills 和可选集成配置。
-- `project-docs/` 存放项目上下文、架构、API、任务板和 records。
+- `project-docs/` 存放项目上下文、架构、API、任务板、跨会话恢复入口和 records。
+- `project-docs/ACTIVE_WORK.md` 记录当前 feature、task、stage、blocker 和下一步动作，让新窗口可以一句话继续。
 - `features/` 存放 feature 级别的 spec、plan、tasks、dispatch、results 和 archive。
 
 稳定核心分成两层：
@@ -126,6 +127,7 @@ project-docs/00_PROJECT_CONTEXT.md
 project-docs/01_ARCHITECTURE.md
 project-docs/02_API_SPEC.md
 project-docs/03_TASK_BOARD.md
+project-docs/ACTIVE_WORK.md
 ```
 
 推荐阶段如下：
@@ -135,6 +137,7 @@ project-docs/03_TASK_BOARD.md
 -> 项目上下文
 -> 架构/API 边界
 -> 初始任务板
+-> Active Work 恢复入口
 -> Feature 拆分
 -> Feature 级 spec / plan / tasks
 -> subagent 实施
@@ -145,6 +148,14 @@ project-docs/03_TASK_BOARD.md
 ```
 
 这种方式适合从零开始构建项目，因为它先建立项目级方向，再拆分具体功能。
+
+日常重新打开一个 AI 会话时，不需要重新解释全部上下文。推荐直接说：
+
+```text
+你是 Manager，请读取 AGENTS.md 和 project-docs/ACTIVE_WORK.md，按当前状态继续开发。
+```
+
+Manager 应根据 `ACTIVE_WORK.md` 恢复当前 feature/task/stage，运行必要检查，结束时更新该文件，并输出配置中的心跳口令。默认口令是：`AI为你保驾护航`。
 
 ## Feature 流程
 

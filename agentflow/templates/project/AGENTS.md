@@ -10,6 +10,10 @@ not replace detailed role prompts in `.agentflow/agents/` or skills in
 The default runtime model is subagent-only.
 
 - The main assistant acts as Manager / Orchestrator.
+- New sessions should start from `project-docs/ACTIVE_WORK.md` when it exists.
+  The user should be able to say: "You are the Manager; continue development."
+  Treat that as shorthand for reading `AGENTS.md`, `agentflow.config.yml`, and
+  `project-docs/ACTIVE_WORK.md` before continuing.
 - Long or multi-stage work should be delegated to fresh subagents with narrow
   context.
 - CCB-style inbox/outbox messaging is not used. Persistent records are written
@@ -18,6 +22,9 @@ The default runtime model is subagent-only.
   context before long multi-step work.
 - Use `agentflow feature status FEATURE-XXX-*` before stage handoff. CLI output
   is the source of truth for runtime stage state.
+- The Manager should run or verify routine checks through hooks and CLI
+  commands. The human supervises the Manager's reported checks instead of
+  manually driving every gate.
 - Creator and reviewer roles are separated for spec, plan, tasks, implementation
   review, and final verification.
 
@@ -41,11 +48,14 @@ must clarify or draft those documents before implementation work begins.
 ### Manager / Orchestrator
 
 - Owns project state, gates, dispatch, records, and final archive.
+- Owns `project-docs/ACTIVE_WORK.md` as the cross-session resume point.
 - Reads project docs and current feature bundle before delegating.
 - Uses CLI stage gates instead of relying on memory alone for stage transitions.
 - Keeps the main context focused on decisions and state, not implementation
   details.
 - Does not let multiple subagents edit the same unclear scope at the same time.
+- Ends each work session with the configured heartbeat output and updates
+  `project-docs/ACTIVE_WORK.md`.
 
 ### Specification Roles
 
@@ -141,3 +151,55 @@ next action.
 - Do not implement from vague requirements; clarify or document assumptions.
 - Keep subagent prompts narrow and self-contained.
 - If a task is blocked, record the blocker and required decision.
+- If the configured heartbeat output is missing from the previous Manager
+  output or `ACTIVE_WORK.md`, re-read this file,
+  `agentflow.config.yml`, and `project-docs/ACTIVE_WORK.md` before continuing.
+
+## 8. Cross-Session Resume
+
+The durable resume file is:
+
+```text
+project-docs/ACTIVE_WORK.md
+```
+
+At the start of a new session, the Manager must:
+
+1. Read `AGENTS.md`.
+2. Read `project-docs/ACTIVE_WORK.md`.
+3. Run `agentflow feature status FEATURE-XXX-*` for the current feature when one
+   is listed.
+4. Continue the recorded next action instead of re-planning from scratch.
+
+At the end of a session, the Manager must update `ACTIVE_WORK.md` with:
+
+- current feature
+- current stage
+- current task
+- owner role
+- task status across backend/frontend/mobile/test/review when relevant
+- checks actually run
+- blockers
+- next action
+- whether human input is needed
+
+The final response must include the configured heartbeat. Default compact
+format:
+
+```text
+AI为你保驾护航 | checks: yes/no | active_work: yes/no | next: short next action | human: yes/no
+```
+
+When `manager.heartbeat_mode: full`, use:
+
+```yaml
+heartbeat_phrase: AI为你保驾护航
+anchor_pulse:
+  current_feature: FEATURE-XXX or none
+  current_stage: stage or none
+  current_task: task id or none
+  checks_run: yes/no
+  active_work_updated: yes/no
+  next_action_clear: yes/no
+  human_needed: yes/no
+```

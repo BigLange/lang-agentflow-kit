@@ -33,6 +33,7 @@ AgentFlow 给项目提供一份小而明确的本地合同：
 
 - `AGENTS.md` 告诉 agent 如何在当前仓库工作。
 - `project-docs/` 存放项目上下文、架构说明、API 说明和任务板。
+- `project-docs/ACTIVE_WORK.md` 记录当前 feature/task/stage，作为新会话恢复入口。
 - `features/FEATURE-XXX-*` 存放 feature 级 spec、plan、tasks、results 和 archive。
 - `agentflow` CLI 检查 gate、写入 active context、渲染任务板并报告状态。
 
@@ -229,6 +230,7 @@ project-docs/
   01_ARCHITECTURE.md
   02_API_SPEC.md
   03_TASK_BOARD.md
+  ACTIVE_WORK.md
 features/
   FEATURE-001-customer-export/
     state.yml
@@ -288,6 +290,7 @@ updated_at: "2026-06-05"
 - 从 feature state 渲染 `project-docs/03_TASK_BOARD.md`。
 - 检查 feature gate 并报告 blockers。
 - 生成用于 agent 交接的 active context。
+- 生成 `project-docs/ACTIVE_WORK.md`，让 Manager 可以跨会话恢复当前 feature/task/stage。
 - 通过 `agentflow doctor` 运行本地健康检查。
 - 生成 warning-mode Git hooks 和 GitHub Actions 模板。
 - 生成基础 Cursor / Cline / Codex 规则文件。

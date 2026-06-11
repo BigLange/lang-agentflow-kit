@@ -21,11 +21,33 @@
 | `implementation.target_sides` | 当前项目要检查哪些端的实现结果 | 只保留 `backend`，或保留 `backend/frontend/mobile` |
 | `gates.require_*` | 是否要求 spec/plan/tasks/review/test 等检查 | 小项目可关闭部分 review |
 | `review.<stage>.mode` | 审查由谁完成 | `self` 自审、`separate-session` 独立会话、`human` 人工批准 |
+| `manager.resume_prompt` | 日常启动短语 | 默认 `你是 Manager，请继续开发。` |
+| `manager.heartbeat_phrase` | Manager 每轮结束必须输出的心跳口令 | 默认 `AI为你保驾护航` |
+| `manager.heartbeat_mode` | 心跳输出模式 | `compact`、`full`、`off` |
 | `external_module_policy` | 外部模块能否复制、纳入项目或只参考 | 高风险模块建议 `reference-only` 只参考 |
 
 ## 带注释的完整示例
 
 ```yaml
+# AgentFlow 项目配置。
+#
+# 给 AI Manager 的说明：
+# - 创建 feature 或继续开发前，先读取本文件。
+# - 通过 project.docs_dir 找到 project-docs/ACTIVE_WORK.md。
+# - 用户没有指定 --type 时，使用 workflow.default_type。
+# - 根据 implementation.target_sides 判断需要 backend/frontend/mobile 哪些结果文件。
+# - 根据 gates 和 review 判断哪些检查必须通过。
+# - 优先把重复检查放进 hooks，不要让人每天手动跑一串命令。
+# - 每轮结束必须更新 project-docs/ACTIVE_WORK.md，并按 manager.heartbeat_mode 输出心跳。
+#
+# 给人和 AI 的配置原则：
+# - 需要调整 YAML 时，AI 必须先说明“为什么要改、改哪些字段、改完有什么影响”。
+# - 用户确认前，AI 不要直接修改本文件；确认后再编辑、验证并记录到 ACTIVE_WORK.md。
+# - AI 修改后必须检查 YAML 语法，并运行必要的 agentflow status/gate/check。
+# - 如果项目没有移动端，删除 implementation.target_sides 里的 mobile。
+# - auth/user/permission/payment/upload/crypto 等高风险功能应使用 sensitive。
+# - 公共第三方模块默认 reference-only，不要直接复制安全关键代码。
+
 # 配置文件版本。当前固定写 1。
 version: 1
 
@@ -35,7 +57,25 @@ profile: standard
 # 复杂度标签：light / standard / strict。
 complexity_profile: standard
 
+manager:
+  # 日常启动短语。用户可以只说这句话，AI 应读取 AGENTS.md、
+  # agentflow.config.yml 和 project-docs/ACTIVE_WORK.md 后继续。
+  resume_prompt: "你是 Manager，请继续开发。"
+
+  # Manager 每轮结束必须输出的心跳口令。
+  # 人可以改成任何容易识别的短句，用来发现 AI 是否开始忘记规则。
+  heartbeat_phrase: "AI为你保驾护航"
+
+  # 心跳输出模式：
+  # compact = 默认，只输出一行短心跳，适合日常使用。
+  # full = 输出完整 anchor_pulse YAML，适合调试或严格审计。
+  # off = 关闭心跳，不推荐。
+  heartbeat_mode: compact
+
 project:
+  # 项目目录约定。AI 只有在项目确实使用了不同目录名时才建议修改。
+  # docs_dir 会决定 ACTIVE_WORK.md、任务板、records 等文件的位置。
+
   # feature bundle（功能工作包）存放目录。
   feature_dir: features
 
@@ -43,6 +83,9 @@ project:
   docs_dir: project-docs
 
 runtime:
+  # runtime 是 CLI 的工作状态和自动检查配置。
+  # AI 修改规则：正式项目保持 gate 强制开启；只有临时实验才考虑关闭。
+
   # 运行时状态文件目录。
   state_dir: .agentflow/state
 
@@ -65,17 +108,25 @@ runtime:
   hook_failure_policy: stop
 
 workflow:
-  # 创建功能时如果不写 --type，就使用这个类型。
+  # 默认 feature 类型。
+  # AI 修改规则：普通业务用 standard；跨多端/多模块用 major；
+  # 涉及用户、权限、支付、上传、加密、租户隔离或外部模块复用时用 sensitive。
   default_type: standard
 
 implementation:
-  # 当前项目需要哪些端的实现结果。
+  # 当前项目包含哪些实现端。
+  # AI 修改规则：没有移动端就删除 mobile；纯后端只保留 backend；
+  # 这会影响 results/<side>.md 的生成和 gate 检查。
   target_sides:
     - backend
     - frontend
     - mobile
 
 gates:
+  # gate 是阶段门禁。true 表示进入下一阶段前必须满足对应检查。
+  # AI 修改规则：为降低复杂度可以关闭部分 review gate；
+  # 但涉及安全、权限、支付、用户数据、外部模块时不要随意关闭。
+
   # spec 阶段是否要求 spec-review.md 通过。
   require_spec_review: true
 
@@ -98,9 +149,10 @@ gates:
   require_review_before_commit: true
 
 review:
-  # self = 当前 AI/session 可以自审
-  # separate-session = 要求另一个独立会话审查
-  # human = 要求人用 agentflow approve 写入批准
+  # 审查模式。
+  # self = 当前会话自审，成本低；separate-session = 独立 AI 会话审查；
+  # human = 必须由人运行 agentflow approve。
+  # AI 修改规则：安全、权限、支付、关键架构决策建议使用 human 或 separate-session。
   spec:
     mode: self
   plan:
@@ -111,15 +163,18 @@ review:
     mode: self
 
 hooks:
-  # 可选：进入某阶段前后自动运行命令。
-  # {{FEATURE}} 会替换成当前 feature ID。
+  # 阶段前后自动运行的命令。
+  # AI 修改规则：把重复的 status/context/gate/test/board render 放进 hooks，
+  # 减少用户手动输入命令；命令保持简单，不要写复杂 shell。
   after_plan:
     - bin/agentflow feature context {{FEATURE}}
   after_implement:
     - bin/agentflow feature verify {{FEATURE}} --stage implement
 
 external_module_policy:
-  # 公共第三方模块默认只允许参考，不直接复制。
+  # 外部模块复用策略。
+  # AI 修改规则：公共模块默认只 reference-only；auth/user/permission/payment/upload/crypto
+  # 等敏感模块不要 direct-copy，vendor 也需要人工确认。
   public_default_mode: reference-only
 
   # 是否允许公共模块以 vendor 方式纳入项目。
@@ -137,6 +192,17 @@ external_module_policy:
       - admin-account
 ```
 
+文件顶部这段注释不会影响 CLI 解析。它是给 AI Manager 和人看的启动说明，目的是让 AI 在新会话里直接知道：
+
+- 先读配置和 `ACTIVE_WORK.md`
+- 如何选择默认 feature 类型
+- 哪些端的结果必须补
+- 哪些 gate/review 必须通过
+- 哪些重复检查应交给 hook
+- 每轮结束必须更新 `ACTIVE_WORK.md` 并按 `manager.heartbeat_mode` 输出心跳
+
+这些中文注释也用于指导 AI 修改 YAML。推荐规则是：先提出建议，说明原因和影响，等用户确认后再改；改完必须验证 YAML，并运行必要的 `agentflow status/gate/check`。
+
 ## 字段说明
 
 ### 顶层字段
@@ -147,12 +213,18 @@ external_module_policy:
 | `profile` | 初始化模式：`lite`、`standard`、`full`。 |
 | `complexity_profile` | 面向人和 AI 的复杂度标签：`light`、`standard`、`strict`。 |
 
+### `manager`
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `manager.heartbeat_phrase` | `AI为你保驾护航` | Manager 每轮结束必须输出的心跳口令。缺失时说明可能需要重新读取上下文。 |
+
 ### `project`
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
 | `project.feature_dir` | `features` | feature bundle 存放目录。 |
-| `project.docs_dir` | `project-docs` | 项目文档、任务板和 records 目录。 |
+| `project.docs_dir` | `project-docs` | 项目文档、`ACTIVE_WORK.md`、任务板和 records 目录。 |
 
 ### `runtime`
 

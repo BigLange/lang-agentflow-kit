@@ -16,6 +16,69 @@
 | `agentflow board render` | `project.docs_dir`、feature `state.yml` | 重新生成任务板 |
 | `agentflow reuse gate FEATURE-XXX` | `external_module_policy` | 检查第三方模块复用风险 |
 
+日常协作中，人不需要手动执行所有命令。推荐让 Manager 根据 `project-docs/ACTIVE_WORK.md` 自动运行这些检查，并在每轮结束输出配置中的心跳。默认是短行输出；只有 `manager.heartbeat_mode: full` 时才输出完整 `anchor_pulse`。
+
+## 配置文件顶部注释给 AI 看
+
+初始化后的 `agentflow.config.yml` 顶部会包含一段注释。它不是给 CLI 执行的，而是给 AI Manager 读的。
+
+这段注释会提醒 Manager：
+
+```text
+1. 创建 feature 或继续工作前先读配置。
+2. 从 project.docs_dir 找到 project-docs/ACTIVE_WORK.md。
+3. 用户没指定 --type 时使用 workflow.default_type。
+4. 根据 implementation.target_sides 判断需要 backend/frontend/mobile 哪些结果。
+5. 根据 gates 和 review 判断哪些检查必须通过。
+6. 尽量通过 hooks 执行重复检查，不要让人手动跑一堆命令。
+7. 每轮结束更新 ACTIVE_WORK.md，并按 manager.heartbeat_mode 输出心跳。
+```
+
+这让新窗口里的人机协作可以很短：
+
+```text
+你是 Manager，请继续开发。
+```
+
+建议把“继续开发时先读 `AGENTS.md`、`agentflow.config.yml` 和 `project-docs/ACTIVE_WORK.md`”写进 `AGENTS.md`、`CLAUDE.md` 或其他 AI 工具的必读规则文件里。这样用户日常只需要一句短指令。
+
+如果 AI 忘记这些规则，人的介入点不是手动补跑所有命令，而是要求它重新读取这三个文件。
+
+默认心跳口令在配置里：
+
+```yaml
+manager:
+  heartbeat_phrase: "AI为你保驾护航"
+```
+
+你可以把它改成任何容易识别的短句。Manager 每轮结束必须输出这个口令。
+
+## 让 AI 修改配置的规则
+
+`agentflow.config.yml` 里的中文注释既给人看，也给 AI Manager 看。它们的作用不是替代文档，而是让 AI 在初始化项目时知道哪些字段可以改、什么时候该改、改完要检查什么。
+
+推荐让 AI 按这个顺序处理配置：
+
+```text
+1. 先读 AGENTS.md、agentflow.config.yml、需求文档和 project-docs/ACTIVE_WORK.md。
+2. 只输出配置修改建议，不直接改文件。
+3. 对每个建议说明：为什么改、改哪个字段、改完影响什么命令或 gate。
+4. 等用户确认。
+5. 修改 YAML。
+6. 检查 YAML 语法，运行必要的 agentflow status/gate/check。
+7. 把配置变更和检查结果写入 ACTIVE_WORK.md。
+```
+
+可以直接对 AI 说：
+
+```text
+请根据需求文档检查 agentflow.config.yml。
+先只给出修改建议和原因，不要直接改。
+我确认后再修改 YAML，并运行必要检查。
+```
+
+AI 不应该为了“看起来更严格”随意打开所有 gate，也不应该为了“用起来简单”随意关闭安全相关 gate。判断标准是项目风险，而不是字段越多越好。
+
 ## 常见配置场景
 
 ### 纯后端项目
@@ -130,6 +193,30 @@ agentflow feature create "help page" --type standard
 ## 一条完整流程里，配置如何生效
 
 下面用 `FEATURE-001-user-auth` 举例，把常见配置串起来。
+
+### 0. 新会话恢复时
+
+你只需要说：
+
+```text
+你是 Manager，请读取 AGENTS.md 和 project-docs/ACTIVE_WORK.md，按当前状态继续开发。
+```
+
+Manager 应该读取：
+
+```text
+project-docs/ACTIVE_WORK.md
+```
+
+实际效果：
+
+```text
+1. 确认当前 feature、stage、task 和 owner role。
+2. 查看上次已执行 checks 和 blocker。
+3. 运行必要的 status/context/gate/check。
+4. 从记录的 next action 继续，而不是重新规划。
+5. 本轮结束前更新 ACTIVE_WORK.md 并按 manager.heartbeat_mode 输出心跳。
+```
 
 ### 1. 创建 feature 时
 

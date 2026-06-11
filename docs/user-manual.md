@@ -1,10 +1,74 @@
 # Lang AgentFlow Kit 使用说明手册
 
-这份手册只讲“搭好以后怎么用”。默认路径尽量简单：把复杂的 gate、review、第三方模块治理放到后面的高级章节。
+这份手册只讲“搭好以后怎么用”。默认目标是：前期把配置和规则准备好，后期让 Manager Agent 自动执行流程检查，人只监督输出是否可信。
 
-## 先记住 4 个命令
+## 日常只需要一句话
 
-日常使用先记这几个就够了：
+新窗口或第二天继续开发时，优先这样说：
+
+```text
+你是 Manager，请继续开发。
+```
+
+建议把下面这条固定规则写进 `AGENTS.md`、`CLAUDE.md`、`.cursorrules` 或你的 AI 工具必读文件：
+
+```text
+当用户说“你是 Manager，请继续开发”时，先读取 AGENTS.md、agentflow.config.yml 和 project-docs/ACTIVE_WORK.md，再按当前状态继续。
+```
+
+Manager 应该自己完成：
+
+```text
+读取 AGENTS.md
+-> 读取 agentflow.config.yml
+-> 读取 ACTIVE_WORK
+-> 确认当前 feature/task/stage
+-> 运行必要 status/context/gate/check
+-> 继续当前任务
+-> 更新 ACTIVE_WORK
+-> 按 heartbeat_mode 输出心跳
+```
+
+人不需要每天重新解释项目背景，也不需要手动输入一串难记命令。
+
+## 配置也可以交给 AI
+
+中大型项目开始前，`agentflow.config.yml` 值得认真配置，但不要求用户手动逐项填写。配置文件里的中文注释就是给人和 AI 一起看的：AI 可以根据这些注释判断哪些字段能改、什么时候改、改完需要跑哪些检查。
+
+更推荐的方式是：让 AI 先给建议，用户确认后再改。不要让 AI 一上来就直接改 YAML。
+
+推荐 prompt：
+
+```text
+你是 Manager。请读取 AGENTS.md、agentflow.config.yml 和需求文档。
+
+先不要创建 feature，也不要写代码。
+
+请根据项目情况检查并建议修改 agentflow.config.yml：
+1. implementation.target_sides 应该包含 backend/frontend/mobile 哪些端？
+2. workflow.default_type 应该是 standard、major 还是 sensitive？
+3. review.mode 是否需要 human 或 separate-session？
+4. hooks 是否应该自动运行 status、context、gate、test、board render？
+5. manager.heartbeat_phrase 是否保持默认？
+6. external_module_policy 是否适合当前项目？
+
+请先输出建议和原因，等我确认后再修改 YAML。
+```
+
+确认后再让 AI 修改：
+
+```text
+按我确认的方案修改 agentflow.config.yml。
+修改后运行可用检查，并更新 project-docs/ACTIVE_WORK.md。
+```
+
+AI 修改配置后，至少应该说明三件事：
+
+- 改了哪些字段。
+- 为什么这些字段适合当前项目。
+- 已经运行了哪些检查，结果是什么。
+
+## 备用命令
 
 ```sh
 agentflow feature create "功能名称"
@@ -22,10 +86,75 @@ agentflow board render
 | `feature next` | 尝试推进下一步 |
 | `board render` | 重新生成任务板 |
 
-不确定当前该做什么时，先运行：
+这些命令主要给 Manager 或 hook 使用。人只有在流程不对劲、Manager 输出缺少检查结果、或需要排查问题时才需要手动运行。
 
-```sh
-agentflow feature status FEATURE-XXX
+## Active Work 是什么
+
+`project-docs/ACTIVE_WORK.md` 是跨会话恢复入口。它记录：
+
+- 当前 feature
+- 当前 stage
+- 当前 task
+- 当前 owner role
+- backend/frontend/mobile/test/review 各自状态
+- 上次执行了哪些检查
+- 当前 blocker
+- 下一步动作
+- 是否需要人决策
+
+它的目标是让你随时关闭窗口、随时重新打开，并用一句话恢复工作。
+
+Manager 每轮结束都应该更新这个文件。
+
+## 心跳口令是什么
+
+心跳口令是 Manager 的守则校验。它不是功能结果，而是一个固定尾部，用来证明 Manager 还记得当前规则和状态。
+
+默认口令是：
+
+```text
+AI为你保驾护航
+```
+
+你可以在 `agentflow.config.yml` 中修改：
+
+```yaml
+manager:
+  resume_prompt: "你是 Manager，请继续开发。"
+  heartbeat_phrase: "AI为你保驾护航"
+  heartbeat_mode: compact
+```
+
+默认 `heartbeat_mode: compact`，每轮结束只输出一行：
+
+```text
+AI为你保驾护航 | checks: yes | active_work: yes | next: continue T004 | human: no
+```
+
+如果你把 `heartbeat_mode` 改成 `full`，Manager 才输出完整结构：
+
+```yaml
+heartbeat_phrase: AI为你保驾护航
+anchor_pulse:
+  current_feature: FEATURE-XXX or none
+  current_stage: stage or none
+  current_task: task id or none
+  checks_run: yes/no
+  active_work_updated: yes/no
+  next_action_clear: yes/no
+  human_needed: yes/no
+```
+
+人的监管点很简单：
+
+- 如果口令存在，并且 `checks`、`active_work` 都是 `yes`，通常可以继续让 Manager 工作。
+- 如果口令消失、`active_work` 不是 `yes`，或者连续几轮没有更新 `ACTIVE_WORK.md`，说明 Manager 可能开始漂移。
+- 这时让它重新读取 `AGENTS.md` 和 `ACTIVE_WORK.md`，不要继续惯性开发。
+
+介入提示：
+
+```text
+你漏掉了心跳口令。请重新读取 AGENTS.md、agentflow.config.yml 和 project-docs/ACTIVE_WORK.md，确认当前 feature/task/stage 后继续。
 ```
 
 ## 最简单的使用流程
@@ -86,11 +215,12 @@ Feature 可以理解成一个“功能级小项目”，例如：
 现在处理 FEATURE-001-xxx。
 
 请按 AgentFlow 流程推进：
-1. 先运行 agentflow feature status FEATURE-001-xxx。
-2. 根据 status 的 blocker 判断下一步。
-3. 需要补文档就补 spec/plan/tasks。
-4. 可以实现时再写代码。
-5. 每次结束前运行可用验证命令，并汇报已完成内容、blockers 和下一步。
+1. 先读取 project-docs/ACTIVE_WORK.md。
+2. 运行必要的 status/context/gate/check。
+3. 根据 blocker 判断下一步。
+4. 需要补文档就补 spec/plan/tasks。
+5. 可以实现时再写代码。
+6. 每次结束前更新 ACTIVE_WORK.md，并按 heartbeat_mode 输出心跳。
 
 不要同时开始下一个 feature。
 ```
@@ -185,35 +315,22 @@ agentflow board render
 
 当 feature 已创建后，日常只围绕一个 feature 工作。
 
-先看状态：
-
-```sh
-agentflow feature status FEATURE-001-user-auth
-```
-
-再让 AI 按状态推进：
+推荐让 Manager 自己按状态推进：
 
 ```text
 请处理 FEATURE-001-user-auth。
 
-先运行：
-agentflow feature status FEATURE-001-user-auth
-
+先读取 project-docs/ACTIVE_WORK.md。
+然后运行必要的 agentflow feature status/context/gate/check。
 如果当前还在 spec/plan/tasks 阶段，请先补齐文档，不要写代码。
 如果已经可以实现，请只实现 tasks.md 中当前未完成的任务。
 实现后运行测试或最接近的验证命令。
-最后更新 feature 结果文件，并汇报状态。
-```
-
-推进下一步：
-
-```sh
-agentflow feature next FEATURE-001-user-auth
+最后更新 feature 结果文件和 ACTIVE_WORK.md，并按 heartbeat_mode 输出心跳。
 ```
 
 ## 状态检查命令
 
-简单模式只需要：
+这些命令是备用工具，优先由 Manager 或 hook 执行：
 
 ```sh
 agentflow feature status FEATURE-XXX
@@ -238,6 +355,12 @@ agentflow feature context FEATURE-XXX
 | `check` | 检查文件结构、缺失文件和占位符 |
 | `gate` | 只判断某阶段能不能过，不推进状态 |
 | `context` | 生成给 AI 接手用的当前上下文 |
+
+更完整的命令和触发场景见：
+
+- [配置快速指南](./config-guide.md)
+- [配置字段参考](./config-schema.md)
+- [README 常用命令](../README.md)
 
 ## 前后端移动端项目
 
@@ -357,13 +480,16 @@ agentflow approve FEATURE-XXX --stage plan
 你是这个项目的 AgentFlow Manager。
 
 规则：
-- 先运行 agentflow feature status，确认当前 feature、stage 和 blocker。
+- 先读取 AGENTS.md 和 project-docs/ACTIVE_WORK.md。
+- 根据 ACTIVE_WORK 确认当前 feature、stage、task 和 blocker。
+- 自行运行必要的 agentflow feature status/context/gate/check。
 - 不直接编辑 project-docs/03_TASK_BOARD.md。
 - 每次只推进一个 feature。
 - 没有通过 spec/plan/tasks 前不要写代码。
 - 实现时只做 tasks.md 中当前未完成的任务。
 - 如果涉及第三方完整模块，先登记 module 并通过 reuse gate。
-- 每次结束前运行可用验证命令，并汇报已改文件、验证结果、blockers 和下一步。
+- 每次结束前更新 project-docs/ACTIVE_WORK.md。
+- 最终回复必须包含配置中的心跳输出。
 ```
 
 最重要的原则：
@@ -371,6 +497,7 @@ agentflow approve FEATURE-XXX --stage plan
 ```text
 先拆解，不写代码。
 每次只推进一个 feature。
-不确定时先看 status。
+不确定时先看 ACTIVE_WORK 和 status。
 高风险第三方模块先治理再实现。
+人监管 Manager 输出，不替 Manager 手动搬运流程。
 ```
