@@ -313,6 +313,7 @@ updated_at: "2026-06-05"
 | 主题 | 链接 |
 | --- | --- |
 | 产品介绍 | [`docs/lang-agentflow-kit-introduction.md`](docs/lang-agentflow-kit-introduction.md) |
+| 使用说明手册 | [`docs/user-manual.md`](docs/user-manual.md) |
 | 配置 schema | [`docs/config-schema.md`](docs/config-schema.md) |
 | Runtime guardrails TODO | [`docs/runtime-guardrails-todo.md`](docs/runtime-guardrails-todo.md) |
 | 下一阶段加固路线图 | [`docs/next-stage-hardening-roadmap.md`](docs/next-stage-hardening-roadmap.md) |
