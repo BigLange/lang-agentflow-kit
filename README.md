@@ -138,19 +138,11 @@ features/FEATURE-XXX/state.yml
 | --- | --- |
 | `agentflow init --profile standard` | 在当前项目初始化 AgentFlow。 |
 | `agentflow feature create "user auth"` | 创建新的 feature bundle。 |
-| `agentflow feature create "fix login text" --type trivial` | 为小改动创建更轻量的流程。 |
 | `agentflow feature status FEATURE-001-user-auth` | 查看 feature 状态和下一道 gate。 |
 | `agentflow feature next FEATURE-001-user-auth` | 尝试推进下一步工作流。 |
-| `agentflow gate spec FEATURE-001-user-auth` | 只检查某个阶段，不修改状态。 |
-| `agentflow feature context FEATURE-001-user-auth` | 生成用于 agent 交接的 active context。 |
-| `agentflow check --all` | 运行适合 CI 的项目级健康检查。 |
-| `agentflow check FEATURE-001-user-auth` | 严格检查单个 feature 是否缺文件或残留占位符。 |
-| `agentflow doctor` | 检查本地 runtime 健康状态。 |
 | `agentflow board render --check` | 验证生成任务板是否最新。 |
-| `agentflow module list` | 列出已注册的外部/内部模块。 |
-| `agentflow module contract MODULE_ID` | 为模块生成本地合同和 notes 模板。 |
-| `agentflow reuse analyze FEATURE-001-user-auth` | 生成 feature 级复用分析。 |
-| `agentflow reuse gate FEATURE-001-user-auth` | 在实现前检查外部模块复用策略。 |
+
+更完整的 `gate`、`check`、`context`、外部模块治理和复用检查命令，请先看 [`docs/user-manual.md`](docs/user-manual.md)。
 
 ## 初始化 Profile
 
@@ -168,15 +160,17 @@ agentflow init --profile standard
 
 ## Feature 类型
 
-| 类型 | 阶段 |
-| --- | --- |
-| `trivial` | `implement`, `archive` |
-| `bug` | `implement`, `test`, `archive` |
-| `standard` | `spec`, `plan`, `tasks`, `implement`, `test`, `archive` |
-| `major` | `spec`, `plan`, `tasks`, `dispatch`, `implement`, `test`, `review`, `fix`, `archive` |
-| `sensitive` | `spec`, `reuse-risk`, `plan`, `tasks`, `dispatch`, `implement`, `security-review`, `test`, `review`, `fix`, `archive` |
+类型是 feature 级别的流程强度，不是 task 级标签。完整项目可能有数百个 task，但通常只需要确认几十个 feature 的类型。
 
-小工作请使用较小类型，避免流程过重。涉及正确性、安全、权限、支付或外部复用风险时，使用 `major` 或 `sensitive`。
+| 类型参数 | 中文说明 | 适合场景 |
+| --- | --- | --- |
+| `trivial` | 极小改动 | 文案、样式、配置、小范围调整 |
+| `bug` | 缺陷修复 | 已知问题修复，需要补测试或验证记录 |
+| `standard` | 标准功能 | 普通业务功能，默认选择 |
+| `major` | 复杂功能 | 多模块、多端协作、影响范围较大的功能 |
+| `sensitive` | 敏感/高风险功能 | 用户、权限、认证、支付、文件上传、加密、租户隔离、外部模块复用 |
+
+如果不确定，先用 `standard`。涉及安全、权限、支付、用户数据时用 `sensitive`。各类型对应的完整阶段列表见 [`docs/config-schema.md`](docs/config-schema.md)。
 
 ## 外部模块治理
 
@@ -314,7 +308,8 @@ updated_at: "2026-06-05"
 | --- | --- |
 | 产品介绍 | [`docs/lang-agentflow-kit-introduction.md`](docs/lang-agentflow-kit-introduction.md) |
 | 使用说明手册 | [`docs/user-manual.md`](docs/user-manual.md) |
-| 配置 schema | [`docs/config-schema.md`](docs/config-schema.md) |
+| 配置快速指南 | [`docs/config-guide.md`](docs/config-guide.md) |
+| 配置字段参考 | [`docs/config-schema.md`](docs/config-schema.md) |
 | Runtime guardrails TODO | [`docs/runtime-guardrails-todo.md`](docs/runtime-guardrails-todo.md) |
 | 下一阶段加固路线图 | [`docs/next-stage-hardening-roadmap.md`](docs/next-stage-hardening-roadmap.md) |
 | 变更日志 | [`CHANGELOG.md`](CHANGELOG.md) |
