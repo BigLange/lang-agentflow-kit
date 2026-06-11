@@ -1,71 +1,70 @@
 # Runtime Guardrails TODO
 
-## Goal
+## 目标
 
-Turn Lang AgentFlow Kit from a Markdown-only workflow contract into a
-protocol engine with lightweight runtime guardrails.
+把 Lang AgentFlow Kit 从 Markdown-only 工作流合同，推进为带轻量 runtime guardrails 的协议引擎。
 
-The target is not "support every coding scenario".
+目标不是“支持所有编码场景”。
 
-The target is:
+目标是：
 
-- long-running AI-assisted software projects
-- complex features with multi-stage handoff
-- reduced context drift and protocol forgetting
-- stronger stage enforcement without replacing Markdown workflows
+- 长期 AI 辅助软件项目
+- 多阶段交接的复杂 feature
+- 减少上下文漂移和协议遗忘
+- 在不替代 Markdown 工作流的前提下，加强阶段约束
 
-## Scope
+## 范围
 
-Keep:
+保留：
 
 - `AGENTS.md`
 - `project-docs/`
 - Feature Bundle contracts
-- natural language and Markdown collaboration
+- 自然语言和 Markdown 协作
 
-Add:
+新增：
 
 - runtime verification
 - stage gates
 - active context state
 - optional hooks
-- clearer complexity profiles
+- 更清晰的 complexity profiles
 
-Do not do yet:
+暂不做：
 
-- full external orchestrator runtime
-- automatic spec-kit execution
-- heavy daemon or service architecture
-- replacing Markdown with a database or UI-first workflow
+- 完整外部 orchestrator runtime
+- 自动执行 spec-kit
+- 重型 daemon 或服务架构
+- 用数据库或 UI-first workflow 替代 Markdown
 
-## Phase 0: Positioning And Contract Cleanup
+## Phase 0: 定位和合同清理
 
-- [x] Rewrite the root `README.md` positioning around complex, long-running AI projects.
-- [x] Explicitly document non-goals: small fixes, one-off scripts, quick vibe coding.
-- [x] Clarify that current stable assets are the Feature Bundle contract and records contract.
-- [x] Document the difference between protocol constraints and runtime constraints.
-- [x] Add a short architecture note for "Markdown contract + lightweight runtime guardrails".
+- [x] 重写根 `README.md`，围绕复杂、长期 AI 项目重新定位。
+- [x] 明确非目标：小修补、一次性脚本、快速 vibe coding。
+- [x] 说明当前稳定资产是 Feature Bundle contract 和 records contract。
+- [x] 说明 protocol constraints 与 runtime constraints 的区别。
+- [x] 添加“Markdown contract + lightweight runtime guardrails”的简短架构说明。
 
-## Phase 1: Config Schema Upgrade
+## Phase 1: 配置 Schema 升级
 
-- [x] Extend `agentflow.config.yml` instead of moving config paths immediately.
-- [x] Add `complexity_profile` support. Current template value: `standard`.
-- [ ] Add explicit `stages` configuration. Deferred until the v1 global gate model proves insufficient.
-- [x] Document structured per-stage `gates` as a future schema direction while keeping current global gate flags.
-- [x] Add `state` configuration for generated runtime state files.
-- [x] Add `hooks` configuration for optional stage commands.
-- [x] Keep backward compatibility with existing `lite / standard / full` templates.
-- [ ] Define a migration path only after the new schema is stable.
+- [x] 扩展 `agentflow.config.yml`，暂不立即迁移配置路径。
+- [x] 添加 `complexity_profile` 支持。当前模板值：`standard`。
+- [ ] 添加显式 `stages` 配置。延后到 v1 global gate model 被证明不够用之后。
+- [x] 记录 structured per-stage `gates` 作为未来 schema 方向，同时保留当前全局 gate flags。
+- [x] 添加 `state` 配置，用于生成 runtime state files。
+- [x] 添加 `hooks` 配置，用于可选 stage commands。
+- [x] 保持与现有 `lite / standard / full` 模板兼容。
+- [ ] 等新 schema 稳定后再定义迁移路径。
 
-## Phase 2: Stage Model
+## Phase 2: 阶段模型
 
-- [x] Define the canonical stage order in CLI behavior.
-- [x] Define stage entry requirements through `gate`.
-- [x] Define stage completion requirements through `verify`.
-- [x] Define stage outputs that are mandatory vs optional in `README.md` and `docs/config-schema.md`.
-- [x] Decide first-pass human-reviewable vs machine-verifiable policy: review files remain human-authored, while runtime verifies their structural completion.
+- [x] 在 CLI 行为中定义 canonical stage order。
+- [x] 通过 `gate` 定义阶段进入条件。
+- [x] 通过 `verify` 定义阶段完成条件。
+- [x] 在 `README.md` 和 `docs/config-schema.md` 中定义 mandatory vs optional stage outputs。
+- [x] 决定第一版 human-reviewable vs machine-verifiable 策略：review 文件仍由人编写，runtime 验证其结构完成度。
 
-Recommended first-pass stages:
+推荐第一版阶段：
 
 - `spec`
 - `plan`
@@ -79,66 +78,66 @@ Recommended first-pass stages:
 
 ## Phase 3: `agentflow verify`
 
-- [x] Add `agentflow verify FEATURE-XXX --stage <stage>`.
-- [x] Add daily namespace alias: `agentflow feature verify FEATURE-XXX --stage <stage>`.
-- [x] Verify required files exist for a stage.
-- [x] Verify obvious placeholders like `TBD` or raw template leftovers are gone.
-- [x] Verify review checklist sections are completed where required.
-- [x] Verify archive/test/review records exist where required.
-- [x] Return clear failure messages that tell the user what is missing.
-- [x] Keep the first version rule-based and deterministic.
+- [x] 添加 `agentflow verify FEATURE-XXX --stage <stage>`。
+- [x] 添加日常 namespace alias：`agentflow feature verify FEATURE-XXX --stage <stage>`。
+- [x] 验证某阶段所需文件存在。
+- [x] 验证明显占位符如 `TBD` 或原始模板残留已移除。
+- [x] 在要求时验证 review checklist sections 已完成。
+- [x] 在要求时验证 archive/test/review records 存在。
+- [x] 返回清晰失败信息，告诉用户缺少什么。
+- [x] 第一版保持 rule-based 和 deterministic。
 
-First-pass verification rules:
+第一版验证规则：
 
-- `spec`: `spec.md` exists, has no open placeholders, `spec-review.md` gate completed.
-- `plan`: `plan.md` exists, depends on passed `spec`, `plan-review.md` gate completed.
-- `tasks`: `tasks.md` exists, depends on passed `plan`, `task-review.md` gate completed.
-- `dispatch`: `dispatch.md` exists and has task ownership rows.
-- `archive`: `archive.md` exists and references implementation, test, and review outputs.
+- `spec`：`spec.md` 存在、无 open placeholders、`spec-review.md` gate completed。
+- `plan`：`plan.md` 存在、依赖已通过的 `spec`、`plan-review.md` gate completed。
+- `tasks`：`tasks.md` 存在、依赖已通过的 `plan`、`task-review.md` gate completed。
+- `dispatch`：`dispatch.md` 存在，且有 task ownership rows。
+- `archive`：`archive.md` 存在，并引用 implementation、test 和 review outputs。
 
 ## Phase 4: `agentflow gate`
 
-- [x] Add `agentflow gate FEATURE-XXX --to <stage>`.
-- [x] Add daily namespace alias: `agentflow feature gate FEATURE-XXX --to <stage>`.
-- [x] Block transitions when prerequisite stages fail verification.
-- [x] Make gate output readable enough for both humans and agents.
-- [x] Reuse `verify` logic instead of duplicating checks.
-- [x] Decide whether `dispatch` and `archive` should hard-fail on unmet gates by default. Current config defaults: `enforce_dispatch_gate: true`, `enforce_archive_gate: true`.
+- [x] 添加 `agentflow gate FEATURE-XXX --to <stage>`。
+- [x] 添加日常 namespace alias：`agentflow feature gate FEATURE-XXX --to <stage>`。
+- [x] 当前置阶段验证失败时阻止 transition。
+- [x] 让 gate 输出同时适合人和 agent 阅读。
+- [x] 复用 `verify` 逻辑，避免重复检查。
+- [x] 决定 `dispatch` 和 `archive` 是否默认 hard-fail unmet gates。当前配置默认：`enforce_dispatch_gate: true`、`enforce_archive_gate: true`。
 
-Recommended first hard gates:
+推荐第一批 hard gates：
 
-- [x] Prevent entering `plan` before `spec` passes.
-- [x] Prevent entering `tasks` before `plan` passes.
-- [x] Prevent `dispatch` before `tasks` passes.
-- [x] Prevent `archive` before required test/review artifacts pass.
+- [x] 进入 `plan` 前阻止未通过的 `spec`。
+- [x] 进入 `tasks` 前阻止未通过的 `plan`。
+- [x] 进入 `dispatch` 前阻止未通过的 `tasks`。
+- [x] 进入 `archive` 前阻止缺失的 test/review artifacts。
 
-## Phase 5: Runtime State And `agentflow context`
+## Phase 5: Runtime State 和 `agentflow context`
 
-- [x] Add `.agentflow/state/` as generated runtime state output.
-- [x] Add `agentflow context FEATURE-XXX`.
-- [x] Add daily namespace alias: `agentflow feature context FEATURE-XXX`.
-- [x] Generate `.agentflow/state/active_context.json`.
-- [x] Keep the file generated from Markdown, never hand-maintained.
-- [x] Include current feature, current stage, next gate, open tasks, and key files.
-- [x] Keep the JSON intentionally small so agents can consume it cheaply.
+- [x] 添加 `.agentflow/state/` 作为生成 runtime state output。
+- [x] 添加 `agentflow context FEATURE-XXX`。
+- [x] 添加日常 namespace alias：`agentflow feature context FEATURE-XXX`。
+- [x] 生成 `.agentflow/state/active_context.json`。
+- [x] 文件从 Markdown 生成，永远不手工维护。
+- [x] 包含 current feature、current stage、next gate、open tasks 和 key files。
+- [x] JSON 保持刻意简短，便于 agent 低成本消费。
 
-The active context should answer:
+active context 应回答：
 
-- What am I working on?
-- Which stage am I in?
-- What must be true before I can move on?
-- Which files matter right now?
-- What is the next blocking action?
+- 我正在做什么？
+- 我处于哪个阶段？
+- 进入下一步前必须满足什么？
+- 现在哪些文件重要？
+- 下一个阻塞动作是什么？
 
 ## Phase 6: Hook System
 
-- [x] Support optional stage hooks in config.
-- [x] Add before/after stage hook keys in config.
-- [x] Allow commands like tests, lint, and `agentflow verify`.
-- [x] Define hook failure behavior through `runtime.hook_failure_policy`.
-- [x] Ensure hooks are optional so the CLI stays lightweight.
+- [x] 在配置中支持 optional stage hooks。
+- [x] 在配置中添加 before/after stage hook keys。
+- [x] 允许测试、lint、`agentflow verify` 等命令。
+- [x] 通过 `runtime.hook_failure_policy` 定义 hook failure behavior。
+- [x] 确保 hooks 是可选的，让 CLI 保持轻量。
 
-Example shape:
+示例形状：
 
 ```yaml
 hooks:
@@ -151,70 +150,70 @@ hooks:
 
 ## Phase 7: Git Hygiene
 
-- [x] Separate durable project knowledge from high-frequency runtime state.
-- [x] Keep architecture/spec/plan/tasks/archive in Git by default.
-- [x] Move transient runtime artifacts under `.agentflow/state/`.
-- [x] Decide whether `project-docs/records/dispatch/` stays durable or becomes transient. Default policy: transient unless the project requires a full audit trail.
-- [x] Add recommended `.gitignore` guidance for generated runtime state.
+- [x] 区分 durable project knowledge 和高频 runtime state。
+- [x] 默认将 architecture/spec/plan/tasks/archive 放进 Git。
+- [x] 将 transient runtime artifacts 移到 `.agentflow/state/` 下。
+- [x] 决定 `project-docs/records/dispatch/` 是 durable 还是 transient。默认策略：除非项目需要完整审计轨迹，否则视为 transient。
+- [x] 为 generated runtime state 添加推荐 `.gitignore` 指引。
 
-## Phase 8: Template And Prompt Alignment
+## Phase 8: Template 和 Prompt 对齐
 
-- [x] Update `AGENTS.md` templates to point agents toward runtime commands.
-- [x] Update Manager role instructions to rely on CLI gate checks, not memory alone.
-- [x] Update feature templates to make checklist completion machine-checkable.
-- [x] Remove language that implies the workflow is enforced purely by discipline.
+- [x] 更新 `AGENTS.md` 模板，让 agent 使用 runtime commands。
+- [x] 更新 Manager 角色说明，依赖 CLI gate checks，而不是只依赖记忆。
+- [x] 更新 feature templates，让 checklist completion 可被机器检查。
+- [x] 移除暗示 workflow 纯靠纪律执行的语言。
 
-## Phase 9: Documentation And Examples
+## Phase 9: 文档和示例
 
-- [x] Add a runtime guardrails section to `README.md`.
-- [x] Add examples of passing vs failing verify output.
-- [ ] Add an example strict project config. Deferred until per-stage schema is implemented, because `complexity_profile: strict` is currently descriptive.
-- [x] Add a migration note for existing users of the current Markdown-only flow.
+- [x] 在 `README.md` 中添加 runtime guardrails section。
+- [x] 添加 passing vs failing verify output 示例。
+- [ ] 添加 strict project config 示例。延后到 per-stage schema 实现之后，因为 `complexity_profile: strict` 当前只是描述性的。
+- [x] 添加已有 Markdown-only flow 用户的迁移说明。
 
-## Implementation Order
+## 实现顺序
 
-1. [x] Positioning update in `README.md`
-2. [x] Config schema extension
-3. [x] Stage model definition in CLI behavior
+1. [x] 更新 `README.md` 定位
+2. [x] 扩展 config schema
+3. [x] 在 CLI 行为中定义 stage model
 4. [x] `agentflow verify`
 5. [x] `agentflow gate`
 6. [x] `agentflow context`
 7. [x] Hook support
-8. [x] Git hygiene and template cleanup
+8. [x] Git hygiene 和 template cleanup
 
-## Immediate Next Tasks
+## 近期任务
 
-- [x] Confirm the first milestone only covers `verify`, `gate`, and `context`.
-- [x] Decide the first supported stages for hard enforcement.
-- [x] Decide whether `dispatch` should hard-fail immediately or stay soft in v1. Current default is hard-fail.
-- [x] Decide whether runtime state should be checked into Git in this repo demo. Current `.gitignore` policy excludes `.agentflow/state/`.
+- [x] 确认第一个 milestone 只覆盖 `verify`、`gate` 和 `context`。
+- [x] 决定第一批支持 hard enforcement 的 stages。
+- [x] 决定 `dispatch` 在 v1 中立即 hard-fail 还是保持 soft。当前默认是 hard-fail。
+- [x] 决定 runtime state 是否在本 demo repo 中提交到 Git。当前 `.gitignore` 策略排除 `.agentflow/state/`。
 
-## Current Runtime Status
+## 当前 Runtime 状态
 
-Checked on 2026-05-27 with `bin/agentflow feature status`:
+2026-05-27 使用 `bin/agentflow feature status` 检查：
 
 | Feature | Runtime Stage | Next Gate | Progress | Status |
 | --- | --- | --- | --- | --- |
 | `FEATURE-001-feature` | `draft` | `plan` | 0% | blocked: spec placeholders and pending spec review |
 | `FEATURE-002-feature` | `draft` | `plan` | 0% | blocked: spec placeholders and pending spec review |
 
-## Optimization Backlog
+## 优化 Backlog
 
-- [x] Document the stage model outside `bin/agentflow` so users do not need to read shell code to understand the contract.
-- [x] Decide whether `gates:` should stay as global booleans or become per-stage structured rules. Decision: keep global booleans for v1; document per-stage rules as future schema.
-- [x] Add passing and failing examples for `feature verify`, `feature gate`, `feature status`, and `feature next`.
-- [x] Clarify records policy: which records are durable project history and which are transient runtime artifacts.
-- [x] Tighten Manager and role instructions so agents use runtime commands as the source of truth.
-- [ ] Add a strict config example once the schema stabilizes.
-- [x] Add migration guidance for projects initialized before runtime guardrails.
+- [x] 在 `bin/agentflow` 之外记录 stage model，让用户不用读 shell code 也能理解合同。
+- [x] 决定 `gates:` 保持全局 booleans 还是改成 per-stage structured rules。决定：v1 保持全局 booleans；将 per-stage rules 记录为未来 schema。
+- [x] 为 `feature verify`、`feature gate`、`feature status` 和 `feature next` 添加 passing/failing 示例。
+- [x] 说明 records policy：哪些 records 是 durable project history，哪些是 transient runtime artifacts。
+- [x] 收紧 Manager 和角色说明，让 agent 使用 runtime commands 作为事实来源。
+- [ ] schema 稳定后添加 strict config 示例。
+- [x] 添加 runtime guardrails 之前初始化项目的迁移指引。
 
-## Next-Stage Hardening Roadmap
+## 下一阶段加固路线图
 
-The next optimization stage is tracked in:
+下一阶段优化跟踪在：
 
 - [next-stage-hardening-roadmap.md](./next-stage-hardening-roadmap.md)
 
-Priority order:
+优先级：
 
 1. YAML-driven execution
 2. Gate system hardening

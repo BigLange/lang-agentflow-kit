@@ -1,143 +1,129 @@
-# Changelog
+# 变更日志
 
 ## Unreleased
 
-### Added
+### 新增
 
-- External Module Governance registry under `.agentflow/modules/`.
-- `agentflow module list`, `show`, `add`, `contract`, and `approve`.
-- `agentflow reuse analyze` and `agentflow reuse gate`.
-- Static policy checks for public module direct-copy, public high-risk vendor,
-  and public critical-domain reuse.
-- Feature-level `reuse-analysis.md` and `external-module-risk.md` generation.
-- External module smoke test.
+- 在 `.agentflow/modules/` 下新增 External Module Governance registry。
+- 新增 `agentflow module list`、`show`、`add`、`contract` 和 `approve`。
+- 新增 `agentflow reuse analyze` 和 `agentflow reuse gate`。
+- 新增针对公共模块 direct-copy、公共高风险 vendor、公共 critical-domain reuse 的静态策略检查。
+- 新增 feature 级 `reuse-analysis.md` 和 `external-module-risk.md` 生成。
+- 新增外部模块 smoke test。
 
 ## 0.6.0 - 2026-06-05
 
-Engineering guardrail and state hardening release.
+工程 guardrail 和 state 加固版本。
 
-### Added
+### 新增
 
-- Per-feature state files at `features/FEATURE-XXX/state.yml`.
-- `agentflow state migrate` to split legacy global feature state into feature-local state files.
-- Generated task board header and `agentflow board render --check`.
-- Feature types for dynamic workflows: `trivial`, `bug`, `standard`, `major`, and `sensitive`.
-- `agentflow doctor` for local runtime and project health checks.
-- `agentflow check --all` for CI-friendly project health checks.
-- Warning-mode `agentflow install-hooks` for Git pre-commit and pre-push hooks.
-- `agentflow init-ci github` for GitHub Actions guardrail workflow generation.
-- `agentflow init-rules cursor|cline|codex|all` for IDE/agent rule files.
-- External module governance templates for sensitive feature reuse review.
-- `agentflow --version` and `agentflow version`, sourced from `package.json`.
-- Smoke test script for initialization, feature creation, board freshness, context, gate, and doctor checks.
+- 在 `features/FEATURE-XXX/state.yml` 中新增 per-feature state files。
+- 新增 `agentflow state migrate`，用于将旧全局 feature state 拆分为 feature-local state files。
+- 新增生成任务板头部和 `agentflow board render --check`。
+- 新增 dynamic workflows 的 feature types：`trivial`、`bug`、`standard`、`major` 和 `sensitive`。
+- 新增 `agentflow doctor`，用于本地 runtime 和项目健康检查。
+- 新增 `agentflow check --all`，用于 CI-friendly 项目健康检查。
+- 新增 warning-mode `agentflow install-hooks`，用于 Git pre-commit 和 pre-push hooks。
+- 新增 `agentflow init-ci github`，用于生成 GitHub Actions guardrail workflow。
+- 新增 `agentflow init-rules cursor|cline|codex|all`，用于 IDE/agent rule files。
+- 新增用于 sensitive feature reuse review 的 external module governance templates。
+- 新增 `agentflow --version` 和 `agentflow version`，版本来源为 `package.json`。
+- 新增 smoke test script，覆盖初始化、feature 创建、board freshness、context、gate 和 doctor checks。
 
-### Changed
+### 变更
 
-- `project-docs/03_TASK_BOARD.md` is now generated from feature-local state.
-- `.agentflow/state/features.yml` is no longer the canonical source of truth.
-- `agentflow check --all` now performs stage-aware health checks instead of failing draft features for placeholders.
-- `agentflow init` no longer overwrites existing config unless `--force` is used.
-- README was rewritten as a concise open-source entry document with quick start, platform support, limitations, and docs links.
+- `project-docs/03_TASK_BOARD.md` 现在从 feature-local state 生成。
+- `.agentflow/state/features.yml` 不再是 canonical source of truth。
+- `agentflow check --all` 现在执行 stage-aware health checks，而不是因为 draft feature 中的占位符失败。
+- `agentflow init` 不再覆盖已有配置，除非使用 `--force`。
+- README 已重写为更简洁的开源入口文档，包含 quick start、platform support、limitations 和 docs links。
 
 ## 0.5.0 - 2026-05-27
 
-Review isolation hardening release.
+Review isolation 加固版本。
 
-### Added
+### 新增
 
-- `review.<stage>.mode` config for `self`, `separate-session`, and `human`.
-- Gate checks for `separate-session` review metadata.
-- `agentflow approve FEATURE --stage <stage>` for CLI-written human approval
-  metadata.
-- Review templates now include a minimal review metadata section.
+- 新增 `review.<stage>.mode` 配置，支持 `self`、`separate-session` 和 `human`。
+- 新增 `separate-session` review metadata 的 gate checks。
+- 新增 `agentflow approve FEATURE --stage <stage>`，用于写入 CLI 生成的 human approval metadata。
+- Review templates 现在包含最小 review metadata section。
 
-### Changed
+### 变更
 
-- `review.mode=self` remains compatible but emits a weak-isolation warning.
-- `review.mode=human` requires CLI approval metadata instead of trusting
-  hand-written human sign-off.
-- The `full` profile defaults to stronger review isolation than `standard`.
+- `review.mode=self` 保持兼容，但会输出 weak-isolation warning。
+- `review.mode=human` 需要 CLI approval metadata，而不是信任手写 human sign-off。
+- `full` profile 默认使用比 `standard` 更强的 review isolation。
 
 ## 0.4.0 - 2026-05-27
 
-State-backed board rendering release.
+State-backed board rendering 版本。
 
-### Added
+### 新增
 
-- `.agentflow/state/features.yml` as the source data for the project task board.
-- `agentflow board render` to regenerate `project-docs/03_TASK_BOARD.md` from state.
-- Feature creation now records new features in state and renders the board.
+- 新增 `.agentflow/state/features.yml`，作为项目任务板的源数据。
+- 新增 `agentflow board render`，从 state 重新生成 `project-docs/03_TASK_BOARD.md`。
+- Feature creation 现在会将新 feature 写入 state 并渲染 board。
 
-### Changed
+### 变更
 
-- `project-docs/03_TASK_BOARD.md` is now treated as rendered output instead of
-  the canonical feature state source.
-- `feature archive` updates feature state and renders the board instead of
-  appending directly to Markdown.
-- Git hygiene now keeps `.agentflow/state/features.yml` versioned while other
-  generated runtime state remains ignored.
+- `project-docs/03_TASK_BOARD.md` 现在被视为渲染输出，而不是 canonical feature state source。
+- `feature archive` 更新 feature state 并渲染 board，而不是直接追加 Markdown。
+- Git hygiene 现在保留 `.agentflow/state/features.yml` 版本控制，同时忽略其他生成 runtime state。
 
 ## 0.3.0 - 2026-05-27
 
-Hardening release for YAML-driven execution, gate semantics, and active context.
+YAML-driven execution、gate semantics 和 active context 的加固版本。
 
-### Added
+### 新增
 
-- YAML-driven feature generation and checks from effective config.
-- `implementation.target_sides` for backend/frontend/mobile result selection.
-- Canonical no-mutation gate command: `agentflow gate STAGE FEATURE`.
-- Markdown active context output at `.agentflow/state/active_context.md`.
-- Stronger active context fields for goal, required files, must-read files,
-  forbidden actions, next step, open questions, and current blockers.
+- 新增从 effective config 驱动的 YAML-driven feature generation and checks。
+- 新增 `implementation.target_sides`，用于选择 backend/frontend/mobile result。
+- 新增 canonical no-mutation gate command：`agentflow gate STAGE FEATURE`。
+- 新增 Markdown active context 输出：`.agentflow/state/active_context.md`。
+- 增强 active context 字段，覆盖 goal、required files、must-read files、forbidden actions、next step、open questions 和 current blockers。
 
-### Changed
+### 变更
 
-- `agentflow check FEATURE` now fails on obvious placeholders, not only missing files.
-- Pure gate checks report stable `Gate Decision` and `Blockers` output without
-  writing context, syncing tasks, or archiving.
-- Stage gates now check more explicit stage-specific readiness rules.
-- `feature context` continues writing JSON and now also writes Markdown as the
-  recommended first-read contract for agents.
+- `agentflow check FEATURE` 现在会因为明显占位符失败，不只检查缺失文件。
+- Pure gate checks 会输出稳定的 `Gate Decision` 和 `Blockers`，且不写 context、不同步 tasks、不 archive。
+- Stage gates 现在检查更明确的 stage-specific readiness rules。
+- `feature context` 继续写 JSON，并新增 Markdown，作为推荐给 agent 的 first-read contract。
 
 ## 0.2.0 - 2026-05-27
 
-Runtime guardrails release.
+Runtime guardrails 版本。
 
-### Rationale
+### 背景
 
-This release addresses the main weakness of the earlier Markdown-only workflow:
-agents could generate the right files but still lose track of stage state during
-long, multi-agent work. Specs could contain placeholders while implementation
-started, review files could remain pending, and task boards could drift away
-from actual feature readiness.
+该版本解决早期 Markdown-only workflow 的主要弱点：agent 能生成正确文件，但在长期、多 agent 工作中仍可能丢失阶段状态。Spec 可能仍含占位符时就开始实现，review 文件可能停留在 pending，任务板也可能偏离 feature 的真实 readiness。
 
-`0.2.0` adds lightweight runtime checks so feature state can be inspected,
-blocked, refreshed, and handed off without replacing the Markdown workflow.
+`0.2.0` 新增轻量 runtime checks，使 feature state 可以在不替代 Markdown workflow 的前提下被检查、阻塞、刷新和交接。
 
-### Added
+### 新增
 
-- `agentflow feature verify FEATURE --stage <stage>` for deterministic stage verification.
-- `agentflow feature gate FEATURE --to <stage>` for hard stage transitions.
-- `agentflow feature context FEATURE` for generated active runtime context.
-- `agentflow feature next FEATURE` for daily gate/sync/context/status progression.
-- `agentflow feature status FEATURE` for current stage, next gate, task progress, records state, and blockers.
-- Runtime config sections for `complexity_profile`, `runtime`, `hooks`, and `gates`.
-- Hook support for `before_<stage>` and `after_<stage>` commands.
-- Feature templates for implementation fix, test, review, result, and archive records.
-- Summary record templates for review, test, and done records.
-- `docs/config-schema.md` with runtime-read keys, stage model, output examples, records policy, and migration notes.
-- `docs/lang-agentflow-kit-introduction.md` as a longer product introduction.
-- Runtime guardrails TODO/status tracking under `docs/runtime-guardrails-todo.md`.
-- Demo feature bundles and project docs showing current blocked-before-plan status.
+- 新增 `agentflow feature verify FEATURE --stage <stage>`，用于 deterministic stage verification。
+- 新增 `agentflow feature gate FEATURE --to <stage>`，用于 hard stage transitions。
+- 新增 `agentflow feature context FEATURE`，用于生成 active runtime context。
+- 新增 `agentflow feature next FEATURE`，用于日常 gate/sync/context/status 推进。
+- 新增 `agentflow feature status FEATURE`，显示 current stage、next gate、task progress、records state 和 blockers。
+- 新增 runtime config sections：`complexity_profile`、`runtime`、`hooks` 和 `gates`。
+- 新增 `before_<stage>` 和 `after_<stage>` command hooks 支持。
+- 新增 implementation fix、test、review、result 和 archive records 的 feature templates。
+- 新增 review、test 和 done summary record templates。
+- 新增 `docs/config-schema.md`，包含 runtime-read keys、stage model、output examples、records policy 和 migration notes。
+- 新增 `docs/lang-agentflow-kit-introduction.md`，作为较长产品介绍。
+- 新增 `docs/runtime-guardrails-todo.md`，用于 runtime guardrails TODO/status tracking。
+- 新增 demo feature bundles 和 project docs，展示当前 blocked-before-plan 状态。
 
-### Changed
+### 变更
 
-- README now positions AgentFlow as a Markdown contract plus lightweight runtime guardrails.
-- Manager and project AGENTS templates now treat CLI status/gate/context output as the source of truth for runtime stage state.
-- Git hygiene defaults now ignore generated runtime state and transient dispatch logs.
-- Feature task flow now distinguishes `archive` from `done`.
+- README 现在将 AgentFlow 定位为 Markdown contract + lightweight runtime guardrails。
+- Manager 和 project AGENTS templates 现在将 CLI status/gate/context output 视为 runtime stage state 的事实来源。
+- Git hygiene 默认忽略 generated runtime state 和 transient dispatch logs。
+- Feature task flow 现在区分 `archive` 和 `done`。
 
-### Notes
+### 说明
 
-- `0.2.0` does not yet auto-run spec-kit, Oh My Codex, or spawn all subagents.
-- Per-stage structured gate schema is documented as a future direction; current CLI still reads global `gates:` booleans.
+- `0.2.0` 尚不会自动运行 spec-kit、Oh My Codex 或 spawn all subagents。
+- Per-stage structured gate schema 被记录为未来方向；当前 CLI 仍读取全局 `gates:` booleans。

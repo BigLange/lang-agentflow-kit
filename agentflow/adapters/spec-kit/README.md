@@ -1,12 +1,9 @@
 # spec-kit Adapter
 
-This adapter treats spec-kit as the source of the first three artifacts:
+这个 adapter 把 spec-kit 视为前三个产物的来源：
 
 - `spec.md`
 - `plan.md`
 - `tasks.md`
 
-The current minimum integration does not call spec-kit automatically. It creates
-the same Feature Bundle shape so generated spec-kit files can be copied or
-linked into the bundle. A later adapter can invoke `speckit.specify`,
-`speckit.plan`, and `speckit.tasks` directly.
+当前最小集成不会自动调用 spec-kit。它会创建相同形状的 Feature Bundle，因此由 spec-kit 生成的文件可以复制或链接进 bundle。后续 adapter 可以直接调用 `speckit.specify`、`speckit.plan` 和 `speckit.tasks`。

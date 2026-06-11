@@ -1,93 +1,87 @@
 # Lang AgentFlow Kit
 
-Current version: `0.6.0`
+当前版本：`0.6.0`
 
-Lang AgentFlow Kit is a local workflow initializer for AI-assisted software
-projects. It creates a subagent-first project structure, Markdown working
-contracts, and lightweight CLI guardrails so long-running AI collaboration has
-clear state, handoff points, and review checkpoints.
+Lang AgentFlow Kit 是一个面向 AI 辅助软件项目的本地工作流初始化工具。它会创建以 subagent 为优先的项目结构、Markdown 工作合同，以及轻量级 CLI 守卫能力，让长期 AI 协作具备清晰的状态、交接点和审查检查点。
 
-It is designed for complex projects where agents, humans, specs, plans, tasks,
-tests, reviews, and archive records need to stay aligned over time.
+它适合复杂项目：agents、人、规格说明、计划、任务、测试、审查和归档记录需要在较长时间内保持一致。
 
-## What It Is
+## 它是什么
 
-Lang AgentFlow Kit is:
+Lang AgentFlow Kit 是：
 
-- a local project workflow initializer
-- a Markdown protocol for AI-assisted development
-- a lightweight CLI guardrail system
-- a subagent-first collaboration structure
+- 本地项目工作流初始化器
+- 面向 AI 辅助开发的 Markdown 协议
+- 轻量级 CLI 守卫系统
+- subagent-first 的协作结构
 
-## What It Is Not
+## 它不是什么
 
-It is not:
+它不是：
 
-- an automatic agent runner
-- a background daemon
-- a full multi-agent orchestration platform
-- a replacement for Codex / Claude Code / Gemini CLI
-- a tool mainly designed for tiny one-line changes
+- 自动 agent runner
+- 后台 daemon
+- 完整多 agent 编排平台
+- Codex / Claude Code / Gemini CLI 的替代品
+- 主要面向一行小改动的工具
 
-## What Problem It Solves
+## 它解决什么问题
 
-AI-assisted projects often drift when work spans many sessions: specs stay
-unfinished, plans and tasks diverge, reviews are skipped, task boards are edited
-by hand, and later agents do not know what state the project is really in.
+AI 辅助项目一旦跨越多个会话，往往会发生漂移：spec 没写完、plan 和 tasks 不一致、review 被跳过、任务板被手改坏，后续 agent 也不知道项目真实状态。
 
-AgentFlow gives the project a small local contract:
+AgentFlow 给项目提供一份小而明确的本地合同：
 
-- `AGENTS.md` tells agents how to work in this repo.
-- `project-docs/` stores project context, architecture notes, API notes, and the task board.
-- `features/FEATURE-XXX-*` stores feature-level specs, plans, tasks, results, and archive notes.
-- `agentflow` CLI checks gates, writes active context, renders the board, and reports status.
+- `AGENTS.md` 告诉 agent 如何在当前仓库工作。
+- `project-docs/` 存放项目上下文、架构说明、API 说明和任务板。
+- `features/FEATURE-XXX-*` 存放 feature 级 spec、plan、tasks、results 和 archive。
+- `agentflow` CLI 检查 gate、写入 active context、渲染任务板并报告状态。
 
-## Who It Is For
+## 适用场景
 
-| Good Fit | Poor Fit |
+| 适合 | 不适合 |
 | --- | --- |
-| Long-running AI-assisted projects | One-line edits |
-| Personal projects or small teams using AI heavily | Throwaway experiments |
-| Work that needs specs, plans, tests, reviews, and handoffs | Scripts with no lifecycle |
-| Projects where multiple agents/sessions may touch the same feature | Fully automated agent platforms |
+| 长期 AI 辅助项目 | 一行小改动 |
+| 重度使用 AI 的个人项目或小团队项目 | 临时实验 |
+| 需要 spec、plan、test、review 和交接的工作 | 没有生命周期的脚本 |
+| 多个 agent/session 可能接手同一个 feature 的项目 | 完全自动化 agent 平台 |
 
-## Platform Support
+## 平台支持
 
-| Platform | Support |
+| 平台 | 支持情况 |
 | --- | --- |
-| macOS | Supported |
-| Linux | Supported |
-| Windows | Use WSL or Git Bash |
-| Native PowerShell | Not fully supported yet |
+| macOS | 支持 |
+| Linux | 支持 |
+| Windows | 使用 WSL 或 Git Bash |
+| 原生 PowerShell | 暂未完整支持 |
 
-Notes:
+说明：
 
-- npm is used mainly for installation and distribution.
-- Node `>=18` is the package installation requirement.
-- The current runtime is still a Bash CLI.
+- npm 主要用于安装和分发。
+- package 安装要求 Node `>=18`。
+- 当前 runtime 仍然是 Bash CLI。
 
-## Installation
+## 安装
 
-Install from GitHub:
+从 GitHub 安装：
 
 ```sh
 npm install -g github:BigLange/lang-agentflow-kit
 ```
 
-Check the installed version:
+检查已安装版本：
 
 ```sh
 agentflow --version
 agentflow version
 ```
 
-Run from a source checkout:
+从源码 checkout 运行：
 
 ```sh
 /path/to/lang-agentflow-kit/bin/agentflow --version
 ```
 
-## 5-Minute Quick Start
+## 5 分钟快速开始
 
 ```sh
 npm install -g github:BigLange/lang-agentflow-kit
@@ -101,23 +95,22 @@ agentflow feature status FEATURE-001-customer-export
 agentflow feature next FEATURE-001-customer-export
 ```
 
-What happens:
+执行后会发生：
 
-| Step | What It Does |
+| 步骤 | 作用 |
 | --- | --- |
-| `agentflow init --profile standard` | Creates `AGENTS.md`, `agentflow.config.yml`, `.agentflow/`, `project-docs/`, and `features/`. |
-| `agentflow feature create "customer export"` | Creates `features/FEATURE-001-customer-export/` with the feature bundle and `state.yml`. |
-| `agentflow feature status FEATURE-001-customer-export` | Shows the current stage, next gate, task progress, records, and blockers. |
-| `agentflow feature next FEATURE-001-customer-export` | Attempts to advance to the next stage. If blocked, it prints which files need work. |
+| `agentflow init --profile standard` | 创建 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/`、`project-docs/` 和 `features/`。 |
+| `agentflow feature create "customer export"` | 创建 `features/FEATURE-001-customer-export/`，包含 feature bundle 和 `state.yml`。 |
+| `agentflow feature status FEATURE-001-customer-export` | 显示当前阶段、下一道 gate、任务进度、records 和 blockers。 |
+| `agentflow feature next FEATURE-001-customer-export` | 尝试推进到下一阶段；如果被阻塞，会打印需要补齐的文件。 |
 
-If a gate blocks, that is expected. Open the files it reports, fill the missing
-spec/plan/task/test/review content, then run `status`, `gate`, or `next` again.
+如果 gate 阻塞，这是正常情况。打开命令提示的文件，补齐缺失的 spec/plan/task/test/review 内容，然后再次运行 `status`、`gate` 或 `next`。
 
-## Generated Files
+## 生成文件
 
-`project-docs/03_TASK_BOARD.md` is generated. Do not edit it directly.
+`project-docs/03_TASK_BOARD.md` 是生成文件，请不要直接编辑。
 
-Use these commands instead:
+请使用这些命令：
 
 ```sh
 agentflow feature next FEATURE-001-customer-export
@@ -125,7 +118,7 @@ agentflow feature status FEATURE-001-customer-export
 agentflow board render
 ```
 
-Generated task boards include a header like:
+生成的任务板会包含类似头部：
 
 ```md
 <!--
@@ -133,49 +126,49 @@ GENERATED FILE: DO NOT EDIT DIRECTLY.
 -->
 ```
 
-The source of truth for feature progress is:
+feature 进度的事实来源是：
 
 ```text
 features/FEATURE-XXX/state.yml
 ```
 
-## Common Commands
+## 常用命令
 
-| Command | Purpose |
+| 命令 | 用途 |
 | --- | --- |
-| `agentflow init --profile standard` | Initialize AgentFlow in the current project. |
-| `agentflow feature create "user auth"` | Create a new feature bundle. |
-| `agentflow feature create "fix login text" --type trivial` | Create a smaller workflow for a trivial change. |
-| `agentflow feature status FEATURE-001-user-auth` | Inspect feature state and next gate. |
-| `agentflow feature next FEATURE-001-user-auth` | Try to advance through the next workflow step. |
-| `agentflow gate spec FEATURE-001-user-auth` | Check a stage without mutating state. |
-| `agentflow feature context FEATURE-001-user-auth` | Generate active context for agent handoff. |
-| `agentflow check --all` | Run project-level health checks suitable for CI. |
-| `agentflow check FEATURE-001-user-auth` | Strictly check one feature for missing files/placeholders. |
-| `agentflow doctor` | Check local runtime health. |
-| `agentflow board render --check` | Verify the generated task board is fresh. |
-| `agentflow module list` | List registered external/internal modules. |
-| `agentflow module contract MODULE_ID` | Generate local contract and notes templates for a module. |
-| `agentflow reuse analyze FEATURE-001-user-auth` | Generate feature-level reuse analysis. |
-| `agentflow reuse gate FEATURE-001-user-auth` | Check external module reuse policy before implementation. |
+| `agentflow init --profile standard` | 在当前项目初始化 AgentFlow。 |
+| `agentflow feature create "user auth"` | 创建新的 feature bundle。 |
+| `agentflow feature create "fix login text" --type trivial` | 为小改动创建更轻量的流程。 |
+| `agentflow feature status FEATURE-001-user-auth` | 查看 feature 状态和下一道 gate。 |
+| `agentflow feature next FEATURE-001-user-auth` | 尝试推进下一步工作流。 |
+| `agentflow gate spec FEATURE-001-user-auth` | 只检查某个阶段，不修改状态。 |
+| `agentflow feature context FEATURE-001-user-auth` | 生成用于 agent 交接的 active context。 |
+| `agentflow check --all` | 运行适合 CI 的项目级健康检查。 |
+| `agentflow check FEATURE-001-user-auth` | 严格检查单个 feature 是否缺文件或残留占位符。 |
+| `agentflow doctor` | 检查本地 runtime 健康状态。 |
+| `agentflow board render --check` | 验证生成任务板是否最新。 |
+| `agentflow module list` | 列出已注册的外部/内部模块。 |
+| `agentflow module contract MODULE_ID` | 为模块生成本地合同和 notes 模板。 |
+| `agentflow reuse analyze FEATURE-001-user-auth` | 生成 feature 级复用分析。 |
+| `agentflow reuse gate FEATURE-001-user-auth` | 在实现前检查外部模块复用策略。 |
 
-## Init Profiles
+## 初始化 Profile
 
-| Profile | Includes | Best For | Pros | Cons |
+| Profile | 包含内容 | 适合 | 优点 | 代价 |
 | --- | --- | --- | --- | --- |
-| `lite` | Core files, `AGENTS.md`, project docs, feature templates, records, lighter runtime | Projects that want the minimum protocol layer | Small and easy to adopt | Less process guidance |
-| `standard` | Everything in `lite` plus vendored Superpowers-style skills | Most long-running AI-assisted projects | Best default balance | More structure than tiny tasks need |
-| `full` | Everything in `standard` plus optional Oh My Codex adapter config | Projects preparing external orchestration integration | Most complete template | Heavier; not an automatic orchestrator |
+| `lite` | 核心文件、`AGENTS.md`、项目文档、feature 模板、records、较轻 runtime | 只想要最小协议层的项目 | 小、易采用 | 流程指导较少 |
+| `standard` | `lite` 全部内容，加上 vendored Superpowers-style skills | 大多数长期 AI 辅助项目 | 默认平衡最好 | 对很小任务偏重 |
+| `full` | `standard` 全部内容，加上可选 Oh My Codex adapter 配置 | 准备接入外部编排的项目 | 模板最完整 | 更重；不是自动 orchestrator |
 
-Recommended default:
+推荐默认值：
 
 ```sh
 agentflow init --profile standard
 ```
 
-## Feature Types
+## Feature 类型
 
-| Type | Stages |
+| 类型 | 阶段 |
 | --- | --- |
 | `trivial` | `implement`, `archive` |
 | `bug` | `implement`, `test`, `archive` |
@@ -183,18 +176,13 @@ agentflow init --profile standard
 | `major` | `spec`, `plan`, `tasks`, `dispatch`, `implement`, `test`, `review`, `fix`, `archive` |
 | `sensitive` | `spec`, `reuse-risk`, `plan`, `tasks`, `dispatch`, `implement`, `security-review`, `test`, `review`, `fix`, `archive` |
 
-Use smaller types for small work so the process does not become token-heavy.
-Use `major` or `sensitive` when correctness, security, permissions, payments,
-or external reuse risk matters.
+小工作请使用较小类型，避免流程过重。涉及正确性、安全、权限、支付或外部复用风险时，使用 `major` 或 `sensitive`。
 
-## External Module Governance
+## 外部模块治理
 
-AgentFlow can register and gate external modules without downloading or copying
-their code. Public modules are not trusted by default, and sensitive domains
-such as auth, user, permission, payment, crypto, file upload, admin accounts,
-and tenant isolation are treated as high risk.
+AgentFlow 可以注册并 gate 外部模块，但不会下载或复制它们的代码。公共模块默认不可信，auth、user、permission、payment、crypto、file upload、admin account、tenant isolation 等敏感领域会被视为高风险。
 
-Typical flow:
+典型流程：
 
 ```sh
 agentflow module add public-admin-template \
@@ -211,7 +199,7 @@ agentflow reuse analyze FEATURE-001-admin-user-permission
 agentflow reuse gate FEATURE-001-admin-user-permission
 ```
 
-Generated governance files:
+生成的治理文件：
 
 ```text
 .agentflow/modules/external_modules.yml
@@ -223,17 +211,17 @@ features/FEATURE-XXX/reuse-analysis.md
 features/FEATURE-XXX/external-module-risk.md
 ```
 
-Safety boundaries:
+安全边界：
 
-- AgentFlow does not download public repositories.
-- AgentFlow does not copy or vendor public code automatically.
-- Public critical-domain modules are reference-only by default.
-- Public `direct-copy` is blocked.
-- Public high/critical `vendor` requires explicit human approval.
+- AgentFlow 不下载公共仓库。
+- AgentFlow 不自动复制或 vendor 公共代码。
+- 公共关键领域模块默认只能 reference-only。
+- 公共 `direct-copy` 会被阻止。
+- 公共 high/critical `vendor` 需要明确人工批准。
 
-## Core Outputs
+## 核心输出
 
-Typical initialized project:
+典型初始化后的项目：
 
 ```text
 AGENTS.md
@@ -259,7 +247,7 @@ features/
 ```
 
 <details>
-<summary>Example active_context.md</summary>
+<summary>active_context.md 示例</summary>
 
 ```md
 # Active Context
@@ -281,7 +269,7 @@ Do Not:
 </details>
 
 <details>
-<summary>Example feature state.yml</summary>
+<summary>feature state.yml 示例</summary>
 
 ```yaml
 id: "FEATURE-001-customer-export"
@@ -298,42 +286,39 @@ updated_at: "2026-06-05"
 
 </details>
 
-## What It Can Do Today
+## 当前能力
 
-- Initialize a local AgentFlow project structure.
-- Generate feature bundles from templates.
-- Maintain per-feature state in `features/FEATURE-XXX/state.yml`.
-- Render `project-docs/03_TASK_BOARD.md` from feature state.
-- Check feature gates and report blockers.
-- Generate active context for agent handoff.
-- Run local health checks with `agentflow doctor`.
-- Generate warning-mode Git hooks and GitHub Actions templates.
-- Generate basic Cursor / Cline / Codex rule files.
+- 初始化本地 AgentFlow 项目结构。
+- 从模板生成 feature bundle。
+- 在 `features/FEATURE-XXX/state.yml` 中维护每个 feature 的状态。
+- 从 feature state 渲染 `project-docs/03_TASK_BOARD.md`。
+- 检查 feature gate 并报告 blockers。
+- 生成用于 agent 交接的 active context。
+- 通过 `agentflow doctor` 运行本地健康检查。
+- 生成 warning-mode Git hooks 和 GitHub Actions 模板。
+- 生成基础 Cursor / Cline / Codex 规则文件。
 
-## Current Limitations
+## 当前限制
 
-- It is not an automatic Agent runner.
-- It cannot truly spawn subagents by itself.
-- Git hooks / CI enforcement are currently lightweight and warning-first.
-- Legacy global state, if present, is cache/index data only; feature state lives
-  in `features/FEATURE-XXX/state.yml`.
-- External public module reuse is governance-only; do not auto-copy public auth,
-  permission, payment, upload, crypto, or admin-account modules into a project.
-- Native Windows PowerShell support is limited; use WSL or Git Bash.
-- The runtime is intentionally Bash-based and deterministic, not a full YAML
-  schema engine.
+- 它不是自动 Agent runner。
+- 它不能真正自行 spawn subagents。
+- Git hooks / CI enforcement 当前是轻量且 warning-first 的。
+- 如果存在旧全局 state，它只作为缓存/索引数据；feature state 位于 `features/FEATURE-XXX/state.yml`。
+- 外部公共模块复用只做治理；不要自动把公共 auth、permission、payment、upload、crypto 或 admin-account 模块复制进项目。
+- 原生 Windows PowerShell 支持有限；请使用 WSL 或 Git Bash。
+- runtime 有意保持 Bash-based 和确定性，不是完整 YAML schema engine。
 
-## Detailed Docs
+## 详细文档
 
-| Topic | Link |
+| 主题 | 链接 |
 | --- | --- |
-| Product introduction | [`docs/lang-agentflow-kit-introduction.md`](docs/lang-agentflow-kit-introduction.md) |
-| Config schema | [`docs/config-schema.md`](docs/config-schema.md) |
+| 产品介绍 | [`docs/lang-agentflow-kit-introduction.md`](docs/lang-agentflow-kit-introduction.md) |
+| 配置 schema | [`docs/config-schema.md`](docs/config-schema.md) |
 | Runtime guardrails TODO | [`docs/runtime-guardrails-todo.md`](docs/runtime-guardrails-todo.md) |
-| Hardening roadmap | [`docs/next-stage-hardening-roadmap.md`](docs/next-stage-hardening-roadmap.md) |
-| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| 下一阶段加固路线图 | [`docs/next-stage-hardening-roadmap.md`](docs/next-stage-hardening-roadmap.md) |
+| 变更日志 | [`CHANGELOG.md`](CHANGELOG.md) |
 
-## Development
+## 开发
 
 ```sh
 npm run check

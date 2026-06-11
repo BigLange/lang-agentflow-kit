@@ -1,16 +1,12 @@
-# Next-Stage Hardening Roadmap
+# 下一阶段加固路线图
 
-This roadmap captures the hardening path that started after the `0.2.0` runtime
-guardrails release and has since shipped through `0.6.0`.
+这份路线图记录 `0.2.0` runtime guardrails 发布后开始的加固路径，并已持续交付到 `0.6.0`。
 
-The goal is not to add more concepts, roles, or templates. The goal is to make
-the existing protocol harder to bypass:
+目标不是增加更多概念、角色或模板。目标是让现有协议更难被绕过：
 
-> YAML should control generation and checks. Gates should block invalid stage
-> transitions. Active context should reduce long-task context drift. State
-> should be machine-readable, with Markdown rendered from it.
+> YAML 应控制生成和检查。Gates 应阻止无效阶段转换。Active context 应减少长任务上下文漂移。State 应可被机器读取，Markdown 则从 state 渲染。
 
-Priority order:
+优先级：
 
 1. YAML-driven execution
 2. Gate system hardening
@@ -19,30 +15,29 @@ Priority order:
 5. Review isolation
 6. Optional small engine extraction
 
-## TODO 1: Make YAML Control Execution
+## TODO 1: 让 YAML 控制执行
 
-### Goal
+### 目标
 
-`agentflow.config.yml` must not be decorative. If a workflow piece is disabled
-in config, the CLI must not generate it, check it, or block on it.
+`agentflow.config.yml` 不能只是装饰性文件。如果某个 workflow piece 在配置中被关闭，CLI 就不能生成它、检查它或因为它阻塞。
 
-### Work Items
+### 工作项
 
-- [x] Load `agentflow.config.yml` from the project root.
-- [x] Fall back to built-in defaults when config is missing.
-- [x] Implement effective config merging:
+- [x] 从项目根目录加载 `agentflow.config.yml`。
+- [x] 配置缺失时回退到 built-in defaults。
+- [x] 实现 effective config merging：
 
 ```text
 default config + user config = effective config
 ```
 
-- [x] Make `create_feature` generate files from effective config.
-- [x] Make `check` derive required files from effective config instead of a hardcoded file list.
-- [x] If `gates.require_spec_review: false`, do not generate or require `spec-review.md`.
-- [x] If `implementation.target_sides: [backend]`, generate and check only backend implementation outputs.
-- [x] Document which config keys are runtime-enforced and which remain descriptive.
+- [x] 让 `create_feature` 根据 effective config 生成文件。
+- [x] 让 `check` 从 effective config 推导 required files，而不是使用硬编码文件列表。
+- [x] 如果 `gates.require_spec_review: false`，不生成也不要求 `spec-review.md`。
+- [x] 如果 `implementation.target_sides: [backend]`，只生成并检查 backend implementation outputs。
+- [x] 记录哪些 config keys 被 runtime enforced，哪些仍是描述性的。
 
-### Example
+### 示例
 
 ```yaml
 gates:
@@ -53,21 +48,20 @@ implementation:
     - backend
 ```
 
-Expected behavior:
+期望行为：
 
-- no `spec-review.md`
-- no spec review gate check
-- no frontend/mobile result files
-- no frontend/mobile check failures
+- 没有 `spec-review.md`
+- 没有 spec review gate check
+- 没有 frontend/mobile result files
+- 没有 frontend/mobile check failures
 
-## TODO 2: Split Check And Gate Semantics
+## TODO 2: 拆分 Check 和 Gate 语义
 
-### Goal
+### 目标
 
-`check` should validate feature structure. `gate` should decide whether a stage
-can advance.
+`check` 应验证 feature 结构。`gate` 应决定阶段是否可以推进。
 
-### Proposed Commands
+### 建议命令
 
 ```sh
 agentflow check FEATURE-001
@@ -79,101 +73,99 @@ agentflow gate review FEATURE-001
 agentflow gate archive FEATURE-001
 ```
 
-Existing compatibility commands can stay, but docs should clearly explain the
-canonical form.
+兼容命令可以保留，但文档应清楚说明 canonical form。
 
-### `check` Responsibilities
+### `check` 职责
 
-- [x] Feature directory exists.
-- [x] Config-required files exist.
-- [x] Obvious placeholders are removed.
-- [x] File structure is internally complete.
+- [x] Feature directory exists。
+- [x] Config-required files exist。
+- [x] Obvious placeholders are removed。
+- [x] File structure is internally complete。
 
-### `gate` Responsibilities
+### `gate` 职责
 
-- [x] Decide whether the current stage is allowed to advance.
-- [x] Report the blocking reason in stable, agent-readable language.
-- [x] Avoid mutating feature state unless explicitly requested.
+- [x] 决定当前阶段是否允许推进。
+- [x] 用稳定、agent-readable 的语言报告阻塞原因。
+- [x] 除非明确请求，否则不修改 feature state。
 
 ### Gate Rules
 
 #### spec gate
 
-- [x] `spec.md` exists.
-- [x] `spec.md` does not contain `TBD`.
-- [x] Goal is explicit.
-- [x] Scope is explicit.
-- [x] Acceptance criteria exist.
-- [x] If spec review is required, review metadata passes.
+- [x] `spec.md` exists。
+- [x] `spec.md` does not contain `TBD`。
+- [x] Goal is explicit。
+- [x] Scope is explicit。
+- [x] Acceptance criteria exist。
+- [x] 如果要求 spec review，review metadata passes。
 
 #### plan gate
 
-- [x] `plan.md` exists.
-- [x] `plan.md` does not contain `TBD`.
-- [x] Implementation approach exists.
-- [x] Impact file list exists.
-- [x] Risk analysis exists.
-- [x] If plan review is required, review metadata passes.
+- [x] `plan.md` exists。
+- [x] `plan.md` does not contain `TBD`。
+- [x] Implementation approach exists。
+- [x] Impact file list exists。
+- [x] Risk analysis exists。
+- [x] 如果要求 plan review，review metadata passes。
 
 #### tasks gate
 
-- [x] `tasks.md` exists.
-- [x] `tasks.md` does not contain `TBD`.
-- [x] At least one executable task exists.
-- [x] Each task has an owner or execution role.
-- [x] If task review is required, review metadata passes.
+- [x] `tasks.md` exists。
+- [x] `tasks.md` does not contain `TBD`。
+- [x] At least one executable task exists。
+- [x] Each task has an owner or execution role。
+- [x] 如果要求 task review，review metadata passes。
 
 #### implement gate
 
-- [x] Required implementation result files exist.
-- [x] Test file exists when tests are required.
-- [x] Test result is not pending.
-- [x] Test result is not only "not tested".
+- [x] Required implementation result files exist。
+- [x] Test file exists when tests are required。
+- [x] Test result is not pending。
+- [x] Test result is not only "not tested"。
 
 #### review gate
 
-- [x] Review file exists.
-- [x] Review has a clear decision: `approved`, `rejected`, or `needs changes`.
-- [x] Blocking issues prevent the gate from passing.
+- [x] Review file exists。
+- [x] Review has a clear decision: `approved`, `rejected`, or `needs changes`。
+- [x] Blocking issues prevent the gate from passing。
 
 #### archive gate
 
-- [x] `archive.md` exists.
-- [x] Final result is summarized.
-- [x] Change summary exists.
-- [x] Test summary exists.
-- [x] Remaining issues are documented.
+- [x] `archive.md` exists。
+- [x] Final result is summarized。
+- [x] Change summary exists。
+- [x] Test summary exists。
+- [x] Remaining issues are documented。
 
-## TODO 3: Harden Active Context
+## TODO 3: 加固 Active Context
 
-### Goal
+### 目标
 
-Reduce long-task context drift by making active context the first file an agent
-reads before work.
+通过让 active context 成为 agent 工作前阅读的第一个文件，减少长任务上下文漂移。
 
-### Command
+### 命令
 
 ```sh
 agentflow context FEATURE-001
 ```
 
-### Output
+### 输出
 
-Generate one or both:
+生成一个或两个文件：
 
 ```text
 .agentflow/state/active_context.md
 .agentflow/state/active_context.json
 ```
 
-Status:
+状态：
 
-- [x] Generate `.agentflow/state/active_context.md`.
-- [x] Continue generating `.agentflow/state/active_context.json`.
+- [x] 生成 `.agentflow/state/active_context.md`。
+- [x] 继续生成 `.agentflow/state/active_context.json`。
 
-### Required Content
+### 必需内容
 
-Keep active context short. It should include:
+active context 应保持简短。它应包含：
 
 ```text
 Feature:
@@ -188,18 +180,18 @@ Open Questions:
 Related Code Files:
 ```
 
-- [x] Include feature.
-- [x] Include current stage.
-- [x] Include current gate.
-- [x] Include goal.
-- [x] Include required files.
-- [x] Include must-read files.
-- [x] Include forbidden actions.
-- [x] Include next step.
-- [x] Include open questions.
-- [x] Include related code files.
+- [x] Include feature。
+- [x] Include current stage。
+- [x] Include current gate。
+- [x] Include goal。
+- [x] Include required files。
+- [x] Include must-read files。
+- [x] Include forbidden actions。
+- [x] Include next step。
+- [x] Include open questions。
+- [x] Include related code files。
 
-### Required Header
+### 必需头部
 
 ```text
 This is the current working contract.
@@ -208,33 +200,31 @@ Do not start coding before checking the current gate.
 Only open additional docs/files when this context references them or the current task requires verification.
 ```
 
-- [x] Add required active context header.
+- [x] 添加必需 active context header。
 
-Active context is the current task entry point, not the only source of truth.
-Agents should read it first, then open referenced docs and code as needed.
+active context 是当前任务入口，不是唯一事实来源。Agent 应先读它，再按需要打开引用的 docs 和 code。
 
-## TODO 4: State-Backed Board Rendering
+## TODO 4: State-backed Board Rendering
 
-### Problem
+### 问题
 
-Directly appending rows to `project-docs/03_TASK_BOARD.md` makes the task board
-a fragile data source:
+直接往 `project-docs/03_TASK_BOARD.md` 追加行，会让任务板成为脆弱的数据源：
 
-- Markdown tables can break.
-- Git conflicts are likely.
-- Runtime state is hard to parse reliably.
+- Markdown tables 可能损坏。
+- Git conflicts 很可能发生。
+- Runtime 很难可靠解析。
 
-### Goal
+### 目标
 
-State is the source data. Markdown is a rendered view.
+State 是源数据。Markdown 是渲染视图。
 
-### State File
+### State 文件
 
 ```text
 .agentflow/state/features.yml
 ```
 
-Example:
+示例：
 
 ```yaml
 features:
@@ -246,28 +236,27 @@ features:
     updated_at: 2026-05-27
 ```
 
-### Command
+### 命令
 
 ```sh
 agentflow board render
 ```
 
-Responsibilities:
+职责：
 
-- [x] Read `.agentflow/state/features.yml`.
-- [x] Regenerate `project-docs/03_TASK_BOARD.md`.
-- [x] Treat Markdown as output, not canonical state.
+- [x] 读取 `.agentflow/state/features.yml`。
+- [x] 重新生成 `project-docs/03_TASK_BOARD.md`。
+- [x] 将 Markdown 视为输出，而不是 canonical state。
 
 ## TODO 5: Review Isolation
 
-### Goal
+### 目标
 
-Prevent self-review from silently approving high-risk stages.
+防止 self-review 静默批准高风险阶段。
 
-This does not require a full multi-agent runtime yet. Start with protocol-level
-metadata and gate checks.
+当前不需要完整 multi-agent runtime。先从协议层 metadata 和 gate checks 开始。
 
-### Config Shape
+### 配置形状
 
 ```yaml
 review:
@@ -281,7 +270,7 @@ review:
     mode: human
 ```
 
-Supported modes:
+支持模式：
 
 - `self`
 - `separate-session`
@@ -289,13 +278,11 @@ Supported modes:
 
 ### `self`
 
-The current AI may review its own work. Gate should mark this as weak review.
-Use for low-risk stages only.
+当前 AI 可以审查自己的工作。Gate 应将其标记为 weak review。仅用于低风险阶段。
 
 ### `separate-session`
 
-Review must be performed in a separate AI session. The review file must include
-metadata:
+Review 必须在独立 AI session 中完成。Review 文件必须包含 metadata：
 
 ```yaml
 review_mode: separate-session
@@ -305,22 +292,22 @@ blocking_issues: 0
 reviewed_at: 2026-05-27
 ```
 
-If metadata is missing or invalid, the gate must fail.
+如果 metadata 缺失或无效，gate 必须失败。
 
-- [x] `review.mode` is read from config.
-- [x] `separate-session` review metadata is checked by gates.
+- [x] 从 config 读取 `review.mode`。
+- [x] gates 检查 `separate-session` review metadata。
 
 ### `human`
 
-Human approval is required. Do not allow the AI to hand-write human sign-off.
+需要人工批准。不要允许 AI 手写 human sign-off。
 
-Command:
+命令：
 
 ```sh
 agentflow approve FEATURE-001 --stage spec
 ```
 
-The command writes approval metadata:
+该命令写入 approval metadata：
 
 ```yaml
 approved_by: local-user
@@ -328,29 +315,29 @@ approved_at: 2026-05-27T12:00:00
 approval_source: cli
 ```
 
-The gate checks this metadata.
+Gate 检查这些 metadata。
 
-- [x] `agentflow approve FEATURE --stage <stage>` writes CLI approval metadata.
-- [x] `human` review mode requires CLI approval metadata.
+- [x] `agentflow approve FEATURE --stage <stage>` 写入 CLI approval metadata。
+- [x] `human` review mode 要求 CLI approval metadata。
 
-## TODO 6: Do Not Do Yet
+## TODO 6: 暂不做
 
-- Do not add more roles.
-- Do not add more complex templates.
-- Do not build a full runtime platform.
-- Do not auto-spawn multiple agents.
-- Do not add a database.
-- Do not turn YAML into a complex DSL.
-- Do not weaken the core workflow for small tasks.
-- Do not immediately rewrite everything in Node or Python.
+- 不添加更多角色。
+- 不添加更复杂模板。
+- 不构建完整 runtime platform。
+- 不自动 spawn 多个 agents。
+- 不添加数据库。
+- 不把 YAML 变成复杂 DSL。
+- 不为小任务削弱核心 workflow。
+- 不立即全部改写成 Node 或 Python。
 
-## TODO 7: Technical Implementation Route
+## TODO 7: 技术实现路线
 
-Keep `bin/agentflow` as the CLI entrypoint for now.
+目前保留 `bin/agentflow` 作为 CLI entrypoint。
 
-When logic becomes too complex for shell, gradually extract a small engine.
+当逻辑复杂到 shell 难以承载时，逐步抽取一个小 engine。
 
-Possible Node structure:
+可能的 Node 结构：
 
 ```text
 lang-agentflow-kit/
@@ -363,7 +350,7 @@ lang-agentflow-kit/
     board.js
 ```
 
-Possible Python structure:
+可能的 Python 结构：
 
 ```text
 lang-agentflow-kit/
@@ -376,9 +363,9 @@ lang-agentflow-kit/
     board.py
 ```
 
-Do not copy engine code into each user's `.agentflow/engine/` directory.
+不要把 engine code 复制到每个用户的 `.agentflow/engine/` 目录。
 
-User projects should keep only project-local state and configuration:
+用户项目只应保留 project-local state 和 configuration：
 
 ```text
 .agentflow/
@@ -386,49 +373,45 @@ User projects should keep only project-local state and configuration:
   state/
 ```
 
-Tool code should upgrade with `lang-agentflow-kit` itself.
+工具代码应随 `lang-agentflow-kit` 自身升级。
 
-## Recommended Version Route
+## 推荐版本路线
 
-The current released version is `0.6.0`. The older "v0.2: YAML truly controls
-execution" notes below are preserved as historical route planning.
+当前发布版本是 `0.6.0`。下面较旧的 “v0.2: YAML truly controls execution” 说明作为历史路线规划保留。
 
 ### v0.2.x: YAML Truly Controls Execution
 
-- [x] Read config.
-- [x] Merge default config.
-- [x] Generate feature files from effective config.
-- [x] Check files from effective config.
+- [x] Read config。
+- [x] Merge default config。
+- [x] Generate feature files from effective config。
+- [x] Check files from effective config。
 
 ### v0.3: Gate System Hardening
 
-- [x] Split `check` and `gate` semantics.
-- [x] Add stage-specific gate commands.
-- [x] Ensure each gate checks whether the stage can advance.
+- [x] Split `check` and `gate` semantics。
+- [x] Add stage-specific gate commands。
+- [x] Ensure each gate checks whether the stage can advance。
 
 ### v0.4: Active Context Hardening
 
-- [x] Generate stronger active context.
-- [x] Include current working contract header.
-- [x] Reduce long-task context drift.
+- [x] Generate stronger active context。
+- [x] Include current working contract header。
+- [x] Reduce long-task context drift。
 
 ### v0.5: State + Board Render
 
-- [x] Add `.agentflow/state/features.yml`.
-- [x] Add `agentflow board render`.
-- [x] Render Markdown board from state.
+- [x] Add `.agentflow/state/features.yml`。
+- [x] Add `agentflow board render`。
+- [x] Render Markdown board from state。
 
 ### v0.6: Review Isolation
 
-- [x] Support `review.mode`.
-- [x] Support `separate-session` metadata.
-- [x] Support `agentflow approve`.
+- [x] Support `review.mode`。
+- [x] Support `separate-session` metadata。
+- [x] Support `agentflow approve`。
 
-## Final Principle
+## 最终原则
 
-Lang AgentFlow Kit is not for tiny changes that can be handled by direct
-coding. Its value is stable protocol, stage gates, context control, and
-execution order for complex, long-context, multi-stage, multi-agent projects.
+Lang AgentFlow Kit 不面向能直接编码完成的微小改动。它的价值在于为复杂、长上下文、多阶段、多 agent 项目提供稳定协议、阶段 gate、上下文控制和执行顺序。
 
-Do not keep piling on concepts. Make the existing protocol hard enough that an
-agent cannot skip the workflow and still pass the gate.
+不要继续堆概念。要把现有协议加固到 agent 无法跳过 workflow 却仍通过 gate 的程度。
