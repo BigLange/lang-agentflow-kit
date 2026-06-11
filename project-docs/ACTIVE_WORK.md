@@ -47,6 +47,12 @@ Status values:
 - Documented that AI can help edit YAML config and that short Manager prompts can be persisted in AGENTS.md/CLAUDE.md-style rule files.
 - Added Chinese YAML comments that tell AI when to suggest config changes, wait for confirmation, edit YAML, validate syntax, run checks, and update ACTIVE_WORK.
 - Updated docs to clarify that compact heartbeat is the default and full `anchor_pulse` only appears when `manager.heartbeat_mode: full`.
+- Reworked `docs/user-manual.md` around short user intents, Manager follow-up questions, automatic CLI/check execution, third-party module intake, and simplified test/review/archive explanation.
+- Added `.agentflow/skills/agentflow-manager-workflow` as the durable place for fixed Manager workflows.
+- Added Skill frontmatter triggers and a confirmation protocol so short user intents trigger Manager workflows and AI asks for missing decisions.
+- Added requirement-intake flow: after requirements are imported, Manager must infer YAML config, identify third-party module candidates, ask for confirmation, and adjust feature planning when modules are imported.
+- Clarified feature finish flow: Manager should automatically start test/review/archive when implementation is complete, delegate detailed work to focused roles, and keep Manager context small.
+- Bumped package and docs version from 0.6.0 to 1.0.0 to mark the stabilized Manager workflow release.
 
 ## Last Checks Run
 
@@ -56,6 +62,13 @@ agentflow init smoke in /tmp: passed, annotated agentflow.config.yml and project
 agentflow feature create/status smoke in /tmp: passed with manager.heartbeat_phrase present
 npm run check: passed after user workflow documentation updates
 npm run check: passed after YAML AI-comment updates
+npm run check: passed after Manager workflow manual rewrite
+agentflow init --profile standard smoke: passed, agentflow-manager-workflow skill copied
+npm run check: passed after Skill trigger/confirmation protocol update
+agentflow init --profile standard smoke: passed with Skill frontmatter copied
+npm run check: passed after requirement-intake config/module flow update
+npm run check: passed after automatic finish/delegation update
+npm run check: passed after 1.0.0 version bump
 ```
 
 ## Current Blockers
@@ -68,7 +81,7 @@ Human review, then commit and push if requested.
 
 ## Human Decision Needed
 
-- Yes: review the YAML AI-comment workflow and decide whether to commit.
+- Yes: review the simplified Manager workflow manual and decide whether to commit.
 
 ## Heartbeat
 

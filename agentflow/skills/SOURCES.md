@@ -15,3 +15,5 @@ Recommended mappings:
 - `test-driven-development` -> Test Agent
 - `systematic-debugging` -> Fix Agent
 - `finishing-a-development-branch` -> Commit Agent
+- `agentflow-manager-workflow` -> Manager daily workflow, config setup, project
+  split, feature advance, and third-party module intake

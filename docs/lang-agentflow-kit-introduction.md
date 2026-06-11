@@ -31,10 +31,11 @@ features/
 - Markdown 协议层：`AGENTS.md`、`project-docs/`、feature bundle 和 records。
 - 轻量 runtime 守卫层：`agentflow feature verify`、`gate`、`context`、`next` 和 `status`。
 
-当前 `0.6.0` 版本继续推进工程守卫能力：feature state 已下沉到各 feature 目录，
-任务板成为可重建的生成文件，并补充了 dynamic workflow、doctor、CI/hooks/rules
-入口和外部模块准入治理。也就是说，AgentFlow 不再只是生成 Markdown 模板，而是在
-保留 Markdown 灵活性的前提下，把关键流程变成可执行、可检查、可交接的本地协议。
+当前 `1.0.0` 版本把产品重心稳定到 Manager 工作流：用户用短句表达意图，Manager
+读取规则、需求、配置和 `ACTIVE_WORK.md`，主动反问缺失信息，自动提出 YAML 配置建议，
+识别第三方模块候选，拆分 feature，推进阶段，并在实现完成后自动进入测试、审查和归档。
+也就是说，AgentFlow 不再要求用户记住大量命令，而是把命令、gate、hook、records
+和跨会话恢复沉到 Manager/Skill 规则里执行。
 
 ## 安装方式
 
@@ -152,20 +153,22 @@ project-docs/ACTIVE_WORK.md
 日常重新打开一个 AI 会话时，不需要重新解释全部上下文。推荐直接说：
 
 ```text
-你是 Manager，请读取 AGENTS.md 和 project-docs/ACTIVE_WORK.md，按当前状态继续开发。
+你是 Manager，请继续开发。
 ```
 
-Manager 应根据 `ACTIVE_WORK.md` 恢复当前 feature/task/stage，运行必要检查，结束时更新该文件，并输出配置中的心跳口令。默认口令是：`AI为你保驾护航`。
+Manager 应根据 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/skills/agentflow-manager-workflow/SKILL.md` 和 `ACTIVE_WORK.md` 恢复当前 feature/task/stage，运行必要检查，结束时更新该文件，并输出配置中的心跳口令。默认口令是：`AI为你保驾护航`。
 
 ## Feature 流程
 
-当项目级上下文已经明确后，可以使用：
+当项目级上下文已经明确后，用户不需要手动创建所有 feature。推荐说：
 
-```bash
-agentflow feature create "user auth"
+```text
+帮我拆分这个项目，需求在 docs/requirements.md。
 ```
 
-该命令会生成一个 feature bundle：
+Manager 会让用户确认 feature 表，确认后再调用 CLI 生成 feature bundle：
+
+在生成 feature 表之前，Manager 应先根据需求推断项目画像，提出 `agentflow.config.yml` 配置建议，并识别用户管理、权限、支付、上传、后台模板等可复用模块候选。如果用户决定导入现成模块，Manager 应先完成模块登记和复用风险评估，再调整 feature 表。
 
 ```text
 features/FEATURE-XXX-name/

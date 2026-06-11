@@ -1,6 +1,6 @@
 # 下一阶段加固路线图
 
-这份路线图记录 `0.2.0` runtime guardrails 发布后开始的加固路径，并已持续交付到 `0.6.0`。
+这份路线图记录 `0.2.0` runtime guardrails 发布后开始的加固路径，并已持续交付到 `1.0.0`。
 
 目标不是增加更多概念、角色或模板。目标是让现有协议更难被绕过：
 
@@ -377,7 +377,7 @@ lang-agentflow-kit/
 
 ## 推荐版本路线
 
-当前发布版本是 `0.6.0`。下面较旧的 “v0.2: YAML truly controls execution” 说明作为历史路线规划保留。
+当前发布版本是 `1.0.0`。下面较旧的 “v0.2: YAML truly controls execution” 说明作为历史路线规划保留。
 
 ### v0.2.x: YAML Truly Controls Execution
 

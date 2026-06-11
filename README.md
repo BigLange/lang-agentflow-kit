@@ -1,6 +1,6 @@
 # Lang AgentFlow Kit
 
-当前版本：`0.6.0`
+当前版本：`1.0.0`
 
 Lang AgentFlow Kit 是一个面向 AI 辅助软件项目的本地工作流初始化工具。它会创建以 subagent 为优先的项目结构、Markdown 工作合同，以及轻量级 CLI 守卫能力，让长期 AI 协作具备清晰的状态、交接点和审查检查点。
 
@@ -91,27 +91,34 @@ mkdir demo-agentflow
 cd demo-agentflow
 
 agentflow init --profile standard
-agentflow feature create "customer export"
-agentflow feature status FEATURE-001-customer-export
-agentflow feature next FEATURE-001-customer-export
 ```
 
-执行后会发生：
+然后打开 AI 工具，对 Manager 说短句即可：
 
-| 步骤 | 作用 |
+```text
+帮我配置 AgentFlow。
+帮我拆分这个项目，需求在 docs/requirements.md。
+当前阶段完成，继续下一阶段。
+```
+
+Manager 会读取 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/skills/agentflow-manager-workflow/SKILL.md` 和 `project-docs/ACTIVE_WORK.md`，缺信息时反问用户。导入需求后，Manager 会先推断项目画像、提出 YAML 配置建议、识别可能导入的第三方模块；用户确认后再创建 feature、推进阶段、运行检查和更新状态。
+
+背后会发生这些动作：
+
+| 动作 | 作用 |
 | --- | --- |
 | `agentflow init --profile standard` | 创建 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/`、`project-docs/` 和 `features/`。 |
-| `agentflow feature create "customer export"` | 创建 `features/FEATURE-001-customer-export/`，包含 feature bundle 和 `state.yml`。 |
-| `agentflow feature status FEATURE-001-customer-export` | 显示当前阶段、下一道 gate、任务进度、records 和 blockers。 |
-| `agentflow feature next FEATURE-001-customer-export` | 尝试推进到下一阶段；如果被阻塞，会打印需要补齐的文件。 |
+| Manager 创建 feature bundle | 生成 `features/FEATURE-XXX/`、阶段文件和 `state.yml`。 |
+| Manager 检查状态 | 确认当前阶段、下一道 gate、任务进度、records 和 blockers。 |
+| Manager 推进阶段 | 如果 gate 通过就进入下一阶段；如果阻塞就解释原因并反问用户。 |
 
-如果 gate 阻塞，这是正常情况。打开命令提示的文件，补齐缺失的 spec/plan/task/test/review 内容，然后再次运行 `status`、`gate` 或 `next`。
+如果 gate 阻塞，这是正常情况。日常使用时让 Manager 解释 blocker、补齐文件或反问用户；不需要用户自己记住所有命令。
 
 ## 生成文件
 
 `project-docs/03_TASK_BOARD.md` 是生成文件，请不要直接编辑。
 
-请使用这些命令：
+Manager 会刷新状态并重建任务板。底层命令包括：
 
 ```sh
 agentflow feature next FEATURE-001-customer-export
@@ -134,6 +141,8 @@ features/FEATURE-XXX/state.yml
 ```
 
 ## 常用命令
+
+这些命令主要给 Manager、hook 或排查问题时使用。普通用户日常可以说“继续开发”“当前阶段完成”“帮我拆项目”“加入模块”。
 
 | 命令 | 用途 |
 | --- | --- |

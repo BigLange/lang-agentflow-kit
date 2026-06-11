@@ -20,11 +20,27 @@ The default runtime model is subagent-only.
   under `project-docs/records/` and feature bundle `results/` directories.
 - Use `agentflow feature context FEATURE-XXX-*` to refresh the active runtime
   context before long multi-step work.
-- Use `agentflow feature status FEATURE-XXX-*` before stage handoff. CLI output
-  is the source of truth for runtime stage state.
+- Run or verify feature status before stage handoff. CLI output is the source
+  of truth for runtime stage state, but the human should not need to type the
+  command during normal work.
 - The Manager should run or verify routine checks through hooks and CLI
   commands. The human supervises the Manager's reported checks instead of
   manually driving every gate.
+- When a feature's implementation tasks are complete, the Manager should
+  automatically start finish flow: testing, review, fixes, archive, task board
+  update, and `ACTIVE_WORK.md` update. The user should not need to ask for
+  finish flow every time.
+- For day-to-day operation, use `.agentflow/skills/agentflow-manager-workflow`
+  when present. Short user requests such as "continue development", "split this
+  project", "current stage is done, continue", or "add this module" are enough;
+  the Manager must ask missing questions and run the required CLI checks.
+- After requirements are imported, the Manager must infer project configuration
+  and third-party module candidates before finalizing the feature table. If the
+  user chooses to import a module, adjust the feature plan before creating
+  feature bundles.
+- Human confirmation should be requested by the Manager with plain-language
+  options and a recommended default. Do not require the user to provide YAML
+  keys, CLI flags, or long workflow prompts unless they explicitly ask.
 - Creator and reviewer roles are separated for spec, plan, tasks, implementation
   review, and final verification.
 
@@ -53,6 +69,8 @@ must clarify or draft those documents before implementation work begins.
 - Uses CLI stage gates instead of relying on memory alone for stage transitions.
 - Keeps the main context focused on decisions and state, not implementation
   details.
+- Delegates detailed tests, reviews, and fixes to focused roles/subagents to
+  avoid Manager context drift.
 - Does not let multiple subagents edit the same unclear scope at the same time.
 - Ends each work session with the configured heartbeat output and updates
   `project-docs/ACTIVE_WORK.md`.
@@ -102,7 +120,7 @@ For a feature:
 
 1. Create or update `features/FEATURE-XXX-*/spec.md`.
 2. Review the spec.
-3. Run `agentflow feature status FEATURE-XXX-*` and resolve reported blockers.
+3. Run or verify feature status and resolve reported blockers.
 4. Create or update `plan.md`.
 5. Review the plan.
 6. Create or update `tasks.md`.
@@ -167,8 +185,7 @@ At the start of a new session, the Manager must:
 
 1. Read `AGENTS.md`.
 2. Read `project-docs/ACTIVE_WORK.md`.
-3. Run `agentflow feature status FEATURE-XXX-*` for the current feature when one
-   is listed.
+3. Run or verify feature status for the current feature when one is listed.
 4. Continue the recorded next action instead of re-planning from scratch.
 
 At the end of a session, the Manager must update `ACTIVE_WORK.md` with:

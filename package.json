@@ -1,6 +1,6 @@
 {
   "name": "lang-agentflow-kit",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "description": "Lang-flavored subagent-first project workflow initializer inspired by spec-kit, Superpowers, and adapter-based orchestration.",
   "type": "commonjs",
   "bin": {
