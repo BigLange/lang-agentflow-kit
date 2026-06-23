@@ -50,6 +50,8 @@ Advanced feature commands:
   bin/agentflow board render
   bin/agentflow board render --check
   bin/agentflow state migrate
+  bin/agentflow update --check
+  bin/agentflow update --apply
   bin/agentflow doctor
   bin/agentflow install-hooks
   bin/agentflow init-ci github
@@ -1778,6 +1780,176 @@ check_all_features() {
     fi
   done < <(find "$FEATURE_DIR" -maxdepth 1 -type d -name 'FEATURE-[0-9][0-9][0-9]-*' 2>/dev/null | sort)
   return "$failed"
+}
+
+config_has_section() {
+  local section="$1"
+  [[ -f "$CONFIG" ]] && grep -Eq "^${section}:" "$CONFIG"
+}
+
+append_config_section_subagents() {
+  cat >> "$CONFIG" <<'YAML'
+
+subagents:
+  # 模型路由只生成调度建议，不直接调用外部模型。
+  # Manager 应根据 feature type、task complexity、risk、role 和用户覆盖项选择中性 reasoning 档位。
+  default_model_profile: medium
+  model_profiles:
+    low:
+      codex_reasoning_effort: low
+      adapter_hint: "fast responses with lighter reasoning"
+      use_for:
+        - trivial
+        - docs
+        - archive
+        - low-risk-mechanical-edits
+    medium:
+      codex_reasoning_effort: medium
+      adapter_hint: "balanced speed and reasoning depth"
+      use_for:
+        - standard
+        - bug
+        - implementation
+        - ai-tests
+    high:
+      codex_reasoning_effort: high
+      adapter_hint: "greater reasoning depth for complex problems"
+      use_for:
+        - major
+        - architecture
+        - code-review
+        - complex-debugging
+    extra-high:
+      codex_reasoning_effort: extra-high
+      adapter_hint: "maximum reasoning depth for sensitive or critical work"
+      use_for:
+        - sensitive
+        - security-review
+        - auth
+        - permission
+        - payment
+  routing_rules:
+    trivial: low
+    bug: medium
+    standard: medium
+    major: high
+    sensitive: extra-high
+YAML
+}
+
+append_config_section_testing() {
+  cat >> "$CONFIG" <<'YAML'
+
+testing:
+  # AI 测试是 feature 级强制闭环：需要生成测试用例，执行可自动化的测试，
+  # 并记录结果。人工验收是异步队列，通常到 milestone/release 再集中处理。
+  ai_required: true
+  require_test_cases: true
+  require_test_results: true
+  manual_acceptance:
+    enabled: true
+    blocking_level: release
+    allow_pending_before_archive: true
+YAML
+}
+
+update_feature_bundle_files() {
+  local dir="$1"
+  local mode="$2"
+  local title type missing=0
+  title="$(feature_state_value "$dir" "title")"
+  title="${title:-$(basename "$dir")}"
+  type="$(feature_type_for_dir "$dir")"
+
+  if [[ ! -f "$dir/test-cases.md" ]]; then
+    missing=1
+    printf 'Missing feature file: %s\n' "$dir/test-cases.md"
+    [[ "$mode" == "apply" ]] && render_feature_template "$TEMPLATE_DIR/feature/test-cases.md" "$dir/test-cases.md" "$title" "$title" "$type"
+  fi
+  if [[ ! -f "$dir/test-results.md" ]]; then
+    missing=1
+    printf 'Missing feature file: %s\n' "$dir/test-results.md"
+    [[ "$mode" == "apply" ]] && render_feature_template "$TEMPLATE_DIR/feature/test-results.md" "$dir/test-results.md" "$title" "$title" "$type"
+  fi
+  if [[ ! -f "$dir/manual-acceptance.md" ]]; then
+    missing=1
+    printf 'Missing feature file: %s\n' "$dir/manual-acceptance.md"
+    [[ "$mode" == "apply" ]] && render_feature_template "$TEMPLATE_DIR/feature/manual-acceptance.md" "$dir/manual-acceptance.md" "$title" "$title" "$type"
+  fi
+  if [[ ! -f "$dir/model-routing.md" ]]; then
+    missing=1
+    printf 'Missing feature file: %s\n' "$dir/model-routing.md"
+    [[ "$mode" == "apply" ]] && render_feature_template "$TEMPLATE_DIR/feature/model-routing.md" "$dir/model-routing.md" "$title" "$title" "$type"
+  fi
+
+  return "$missing"
+}
+
+update_project() {
+  local mode="$1"
+  local missing=0 feature_dir
+  load_project_paths
+  printf 'AgentFlow update %s\n' "$mode"
+  printf 'CLI version: %s\n' "$(package_version)"
+
+  if [[ ! -f "$CONFIG" ]]; then
+    missing=1
+    printf 'Missing config: %s\n' "$CONFIG"
+    if [[ "$mode" == "apply" ]]; then
+      cp "$TEMPLATE_DIR/config/standard.yml" "$CONFIG"
+      printf 'Created config from standard template: %s\n' "$CONFIG"
+    fi
+  else
+    if ! config_has_section "subagents"; then
+      missing=1
+      printf 'Missing config section: subagents\n'
+      if [[ "$mode" == "apply" ]]; then
+        append_config_section_subagents
+        printf 'Appended config section: subagents\n'
+      fi
+    fi
+    if ! config_has_section "testing"; then
+      missing=1
+      printf 'Missing config section: testing\n'
+      if [[ "$mode" == "apply" ]]; then
+        append_config_section_testing
+        printf 'Appended config section: testing\n'
+      fi
+    fi
+  fi
+
+  mkdir -p "$DOCS_DIR"
+  if [[ ! -f "$(manual_acceptance_board_path)" ]]; then
+    missing=1
+    printf 'Missing project file: %s\n' "$(manual_acceptance_board_path)"
+    if [[ "$mode" == "apply" ]]; then
+      cp "$TEMPLATE_DIR/project-docs/04_MANUAL_ACCEPTANCE.md" "$(manual_acceptance_board_path)"
+      printf 'Created project file: %s\n' "$(manual_acceptance_board_path)"
+    fi
+  fi
+
+  while IFS= read -r feature_dir; do
+    [[ -d "$feature_dir" ]] || continue
+    if ! update_feature_bundle_files "$feature_dir" "$mode"; then
+      missing=1
+    fi
+  done < <(find "$FEATURE_DIR" -maxdepth 1 -type d -name 'FEATURE-[0-9][0-9][0-9]-*' 2>/dev/null | sort)
+
+  if [[ "$mode" == "apply" ]]; then
+    mkdir -p "$PROJECT_ROOT/.agentflow/templates" "$PROJECT_ROOT/.agentflow/agents"
+    cp -n "$PACKAGE_ROOT"/agentflow/templates/feature/* "$PROJECT_ROOT/.agentflow/templates/" 2>/dev/null || true
+    cp -n "$PACKAGE_ROOT"/agentflow/templates/records/* "$PROJECT_ROOT/.agentflow/templates/" 2>/dev/null || true
+    cp -n "$PACKAGE_ROOT"/agentflow/roles/* "$PROJECT_ROOT/.agentflow/agents/" 2>/dev/null || true
+    printf 'Refreshed missing local templates and role files without overwriting existing files.\n'
+  fi
+
+  if [[ "$missing" -eq 0 ]]; then
+    printf 'Project is up to date for AgentFlow %s.\n' "$(package_version)"
+  elif [[ "$mode" == "check" ]]; then
+    printf 'Update needed. Run: agentflow update --apply\n'
+  else
+    printf 'Update applied. Review changes before committing.\n'
+  fi
 }
 
 task_id_from_title() {
@@ -3973,6 +4145,20 @@ main() {
         usage
         exit 1
       fi
+      ;;
+    update)
+      case "${2:-}" in
+        --check|check|"")
+          update_project "check"
+          ;;
+        --apply|apply)
+          update_project "apply"
+          ;;
+        *)
+          usage
+          exit 1
+          ;;
+      esac
       ;;
     doctor)
       doctor_check

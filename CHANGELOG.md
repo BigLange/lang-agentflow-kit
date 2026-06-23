@@ -1,5 +1,16 @@
 # 变更日志
 
+## 1.1.1 - 2026-06-23
+
+### 新增
+
+- 新增 `agentflow update --check`，用于检查已有项目是否缺少当前版本的项目文件、配置段或 feature 文件。
+- 新增 `agentflow update --apply`，用于安全补齐 `subagents`、`testing`、`project-docs/04_MANUAL_ACCEPTANCE.md`、旧 feature 的测试资产和 `model-routing.md`。
+
+### 变更
+
+- smoke test 新增 1.0 风格项目升级场景。
+
 ## 1.1.0 - 2026-06-23
 
 ### 新增

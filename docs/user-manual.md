@@ -444,6 +444,33 @@ agentflow dispatch run FEATURE-001-user-auth --adapter codex --execute
 执行时 adapter 会把 `low`、`medium`、`high`、`extra-high` 映射到 Codex 的
 `model_reasoning_effort` 配置。
 
+## 已有项目怎么升级
+
+如果项目已经用旧版本初始化过，先更新全局 CLI，然后在项目根目录运行：
+
+```sh
+agentflow update --check
+```
+
+它会检查是否缺少：
+
+- `subagents` 配置段
+- `testing` 配置段
+- `project-docs/04_MANUAL_ACCEPTANCE.md`
+- 旧 feature 的 `test-cases.md`
+- 旧 feature 的 `test-results.md`
+- 旧 feature 的 `manual-acceptance.md`
+- 旧 feature 的 `model-routing.md`
+
+确认后执行：
+
+```sh
+agentflow update --apply
+```
+
+这个命令只补缺失内容，不覆盖已有配置或已有 feature 文件。执行后让 Manager
+检查差异，再决定是否提交。
+
 ## 备用命令
 
 这些命令主要给 Manager、hook 或排查问题时使用。普通用户不需要每天手动执行。

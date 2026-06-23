@@ -1,6 +1,6 @@
 # Lang AgentFlow Kit
 
-当前版本：`1.1.0`
+当前版本：`1.1.1`
 
 Lang AgentFlow Kit 是一个面向 AI 辅助软件项目的本地工作流初始化工具。它会创建以 subagent 为优先的项目结构、Markdown 工作合同，以及轻量级 CLI 守卫能力，让长期 AI 协作具备清晰的状态、交接点和审查检查点。
 
@@ -150,6 +150,8 @@ features/FEATURE-XXX/state.yml
 | `agentflow feature create "user auth"` | 创建新的 feature bundle。 |
 | `agentflow feature status FEATURE-001-user-auth` | 查看 feature 状态和下一道 gate。 |
 | `agentflow feature next FEATURE-001-user-auth` | 尝试推进下一步工作流。 |
+| `agentflow update --check` | 检查已有项目是否缺少当前版本的模板、配置段或 feature 文件。 |
+| `agentflow update --apply` | 安全补齐缺失文件和配置段，不覆盖已有内容。 |
 | `agentflow stage plan FEATURE-001-user-auth --stage spec --adapter codex` | 生成 spec/plan/tasks 等前置阶段的 Codex prompt。 |
 | `agentflow dispatch plan FEATURE-001-user-auth --adapter codex` | 生成 Codex 子代理分派计划和 prompt。 |
 | `agentflow dispatch run FEATURE-001-user-auth --adapter codex` | dry-run 显示 Codex 分派脚本；加 `--execute` 才执行。 |

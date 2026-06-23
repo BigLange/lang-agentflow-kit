@@ -3,9 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agentflow-smoke.XXXXXX")"
+LEGACY_ROOT=""
 
 cleanup() {
   rm -rf "$TMP_ROOT"
+  [[ -n "$LEGACY_ROOT" ]] && rm -rf "$LEGACY_ROOT"
 }
 trap cleanup EXIT
 
@@ -20,6 +22,35 @@ cd "$TMP_ROOT"
 "$ROOT/bin/agentflow" stage plan FEATURE-003-admin-permission-system --stage spec --adapter codex
 "$ROOT/bin/agentflow" dispatch plan FEATURE-003-admin-permission-system --adapter codex
 "$ROOT/bin/agentflow" doctor
+
+LEGACY_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agentflow-update.XXXXXX")"
+cd "$LEGACY_ROOT"
+"$ROOT/bin/agentflow" init --profile standard >/dev/null
+"$ROOT/bin/agentflow" feature create "legacy feature" --type standard >/dev/null
+rm -f project-docs/04_MANUAL_ACCEPTANCE.md
+rm -f features/FEATURE-001-legacy-feature/test-cases.md
+rm -f features/FEATURE-001-legacy-feature/test-results.md
+rm -f features/FEATURE-001-legacy-feature/manual-acceptance.md
+rm -f features/FEATURE-001-legacy-feature/model-routing.md
+awk '
+  /^subagents:/ { skip = 1; next }
+  /^testing:/ { skip = 1; next }
+  /^[^[:space:]]/ { skip = 0 }
+  !skip { print }
+' agentflow.config.yml > agentflow.config.yml.tmp
+mv agentflow.config.yml.tmp agentflow.config.yml
+"$ROOT/bin/agentflow" update --check >/tmp/agentflow-update-check.out
+grep -Fq 'Missing config section: subagents' /tmp/agentflow-update-check.out
+grep -Fq 'Missing config section: testing' /tmp/agentflow-update-check.out
+"$ROOT/bin/agentflow" update --apply
+test -f project-docs/04_MANUAL_ACCEPTANCE.md
+test -f features/FEATURE-001-legacy-feature/test-cases.md
+test -f features/FEATURE-001-legacy-feature/test-results.md
+test -f features/FEATURE-001-legacy-feature/manual-acceptance.md
+test -f features/FEATURE-001-legacy-feature/model-routing.md
+grep -Eq '^subagents:' agentflow.config.yml
+grep -Eq '^testing:' agentflow.config.yml
+cd "$TMP_ROOT"
 
 test -f "$TMP_ROOT/features/FEATURE-001-fix-login-text/state.yml"
 test -f "$TMP_ROOT/AGENTS.md"

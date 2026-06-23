@@ -287,6 +287,15 @@ agentflow dispatch run FEATURE-XXX --adapter codex --execute
 审查、修复、归档这些分派任务。`run` 默认只提示脚本路径，只有加 `--execute`
 才实际调用 `codex exec`。
 
+已有项目升级到当前版本时可以使用：
+
+```sh
+agentflow update --check
+agentflow update --apply
+```
+
+`--apply` 只补缺失文件和缺失配置段，不覆盖已有内容。
+
 ### `testing`
 
 | 字段 | 默认值 | 说明 |

@@ -31,7 +31,7 @@ features/
 - Markdown 协议层：`AGENTS.md`、`project-docs/`、feature bundle 和 records。
 - 轻量 runtime 守卫层：`agentflow feature verify`、`gate`、`context`、`next` 和 `status`。
 
-当前 `1.1.0` 版本把产品重心扩展到可分级的 Manager 工作流：用户用短句表达意图，Manager
+当前 `1.1.1` 版本把产品重心扩展到可分级的 Manager 工作流：用户用短句表达意图，Manager
 读取规则、需求、配置和 `ACTIVE_WORK.md`，主动反问缺失信息，自动提出 YAML 配置建议，
 识别第三方模块候选，拆分 feature，推进阶段，并在实现完成后自动进入测试、审查和归档。
 同时，AgentFlow 会生成 AI 测试用例/结果、项目级人工验收总表和 feature/task 级模型路由，

@@ -12,7 +12,7 @@ You are the Manager. Read AGENTS.md and project-docs/ACTIVE_WORK.md, then contin
 
 - Current Feature: none
 - Current Stage: documentation
-- Current Task: add AI test assets, manual acceptance board, model routing, and Codex adapter
+- Current Task: add update command for existing AgentFlow projects
 - Current Owner Role: Manager
 - Work Status: ready-for-review
 - Human Needed: yes
@@ -61,6 +61,8 @@ Status values:
 - Added Codex stage and dispatch plan/run adapter commands.
 - Added stage-aware active context fields to reduce repeated prompt reading.
 - Bumped package and docs version from 1.0.0 to 1.1.0.
+- Added `agentflow update --check` and `agentflow update --apply` for existing projects.
+- Bumped package and docs version from 1.1.0 to 1.1.1.
 
 ## Last Checks Run
 
@@ -80,6 +82,9 @@ npm run check: passed after 1.0.0 version bump
 npm run check: passed after test/model-routing/Codex adapter updates
 npm run smoke: passed after test/model-routing/Codex adapter updates
 npm run smoke:external-modules: passed after test/model-routing/Codex adapter updates
+npm run check: passed after update command
+npm run smoke: passed after update command
+npm run smoke:external-modules: passed after update command
 ```
 
 ## Current Blockers
