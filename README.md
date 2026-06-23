@@ -101,13 +101,14 @@ agentflow init --profile standard
 当前阶段完成，继续下一阶段。
 ```
 
-Manager 会读取 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/skills/agentflow-manager-workflow/SKILL.md` 和 `project-docs/ACTIVE_WORK.md`，缺信息时反问用户。导入需求后，Manager 会先推断项目画像、提出 YAML 配置建议、识别可能导入的第三方模块；用户确认后再创建 feature、推进阶段、运行检查和更新状态。
+Manager 会读取 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/skills/agentflow-manager-workflow/SKILL.md` 和 `project-docs/ACTIVE_WORK.md`，缺信息时反问用户。导入需求后，Manager 会先生成 `project-docs/01_ARCHITECTURE.md` 架构建议，只反问会影响技术路线的问题；用户确认架构后，再提出 YAML 配置建议、识别可能导入的第三方模块、创建 feature、推进阶段、运行检查和更新状态。
 
 背后会发生这些动作：
 
 | 动作 | 作用 |
 | --- | --- |
 | `agentflow init --profile standard` | 创建 `AGENTS.md`、`agentflow.config.yml`、`.agentflow/`、`project-docs/` 和 `features/`。 |
+| `agentflow architecture check` | 检查 `project-docs/01_ARCHITECTURE.md` 是否已确认且没有占位符。 |
 | Manager 创建 feature bundle | 生成 `features/FEATURE-XXX/`、阶段文件和 `state.yml`。 |
 | Manager 检查状态 | 确认当前阶段、下一道 gate、任务进度、records 和 blockers。 |
 | Manager 推进阶段 | 如果 gate 通过就进入下一阶段；如果阻塞就解释原因并反问用户。 |
@@ -150,6 +151,7 @@ features/FEATURE-XXX/state.yml
 | `agentflow feature create "user auth"` | 创建新的 feature bundle。 |
 | `agentflow feature status FEATURE-001-user-auth` | 查看 feature 状态和下一道 gate。 |
 | `agentflow feature next FEATURE-001-user-auth` | 尝试推进下一步工作流。 |
+| `agentflow architecture check` | 在完整项目拆分前检查架构文档是否已确认。 |
 | `agentflow update --check` | 检查已有项目是否缺少当前版本的模板、配置段或 feature 文件。 |
 | `agentflow update --apply` | 安全补齐缺失文件和配置段，不覆盖已有内容。 |
 | `agentflow stage plan FEATURE-001-user-auth --stage spec --adapter codex` | 生成 spec/plan/tasks 等前置阶段的 Codex prompt。 |
@@ -308,6 +310,8 @@ updated_at: "2026-06-05"
 - 在 `features/FEATURE-XXX/state.yml` 中维护每个 feature 的状态。
 - 从 feature state 渲染 `project-docs/03_TASK_BOARD.md`。
 - 检查 feature gate 并报告 blockers。
+- 在完整项目拆分前生成并确认 `project-docs/01_ARCHITECTURE.md`，用
+  `agentflow architecture check` 检查架构状态。
 - 生成用于 agent 交接的 active context。
 - 生成 feature 级 AI 测试用例/结果，并维护项目级人工验收清单。
 - 生成 feature/task 级模型路由建议，用 `low`、`medium`、`high`、`extra-high` reasoning 档位指导 subagent 分派。

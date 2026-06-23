@@ -47,6 +47,7 @@ Advanced feature commands:
   bin/agentflow dispatch plan FEATURE-001-title [--adapter codex]
   bin/agentflow dispatch run FEATURE-001-title [--adapter codex] [--execute]
   bin/agentflow feature archive FEATURE-001-title
+  bin/agentflow architecture check
   bin/agentflow board render
   bin/agentflow board render --check
   bin/agentflow state migrate
@@ -1981,6 +1982,76 @@ manual_acceptance_board_path() {
   printf '%s/04_MANUAL_ACCEPTANCE.md' "$DOCS_DIR"
 }
 
+architecture_doc_path() {
+  printf '%s/01_ARCHITECTURE.md' "$DOCS_DIR"
+}
+
+architecture_status_value() {
+  local file
+  file="$(architecture_doc_path)"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  awk '
+    /^Status:[[:space:]]*/ {
+      line = $0
+      sub(/^Status:[[:space:]]*/, "", line)
+      print line
+      exit
+    }
+  ' "$file"
+}
+
+check_architecture_ready() {
+  local file status failed=0 placeholder_file
+  load_project_paths
+  file="$(architecture_doc_path)"
+
+  if [[ ! -f "$file" ]]; then
+    printf 'Missing architecture document: %s\n' "$file" >&2
+    return 1
+  fi
+
+  status="$(architecture_status_value)"
+  status="${status:-unknown}"
+  printf 'Architecture status: %s (%s)\n' "$status" "$file"
+
+  if [[ "$status" != "approved" ]]; then
+    printf 'Architecture is not approved. Update %s and set Status: approved after human confirmation.\n' "$file"
+    failed=1
+  fi
+
+  placeholder_file="$(mktemp "${TMPDIR:-/tmp}/agentflow-architecture-placeholders.XXXXXX")"
+  if grep -nE 'TBD|{{[A-Z0-9_]+}}' "$file" >"$placeholder_file" 2>/dev/null; then
+    printf 'Open architecture placeholders:\n'
+    cat "$placeholder_file"
+    failed=1
+  fi
+  rm -f "$placeholder_file"
+
+  if [[ "$failed" -eq 0 ]]; then
+    printf 'Architecture check passed.\n'
+  fi
+  return "$failed"
+}
+
+warn_if_architecture_not_ready() {
+  local file status
+  load_project_paths
+  file="$(architecture_doc_path)"
+  if [[ ! -f "$file" ]]; then
+    printf 'Warning: architecture document is missing: %s\n' "$file" >&2
+    printf 'For full project splitting, run architecture analysis before creating feature bundles.\n' >&2
+    return
+  fi
+
+  status="$(architecture_status_value)"
+  status="${status:-unknown}"
+  if [[ "$status" != "approved" ]] || grep -qE 'TBD|{{[A-Z0-9_]+}}' "$file" 2>/dev/null; then
+    printf 'Warning: project architecture is not confirmed (%s). For full project splitting, complete %s first.\n' "$status" "$file" >&2
+  fi
+}
+
 append_manual_acceptance_feature() {
   local feature_name="$1"
   local feature_title="$2"
@@ -2132,6 +2203,7 @@ create_feature() {
   fi
   local id slug name dir side
   load_project_paths
+  warn_if_architecture_not_ready
   acquire_state_lock
   trap 'release_state_lock' RETURN
   id="$(next_feature_id)"
@@ -3613,6 +3685,19 @@ handle_board_command() {
   esac
 }
 
+handle_architecture_command() {
+  local subcommand="${1:-}"
+  case "$subcommand" in
+    check|"")
+      check_architecture_ready
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 handle_module_command() {
   local subcommand="${1:-}"
   shift || true
@@ -4121,6 +4206,10 @@ main() {
     feature)
       shift
       handle_feature_command "$@"
+      ;;
+    architecture)
+      shift
+      handle_architecture_command "$@"
       ;;
     board)
       shift

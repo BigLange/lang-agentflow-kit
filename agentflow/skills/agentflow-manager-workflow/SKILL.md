@@ -30,8 +30,8 @@ Treat these user messages as complete intents:
 | --- | --- |
 | `你是 Manager，请继续开发` | Resume from `ACTIVE_WORK.md`. |
 | `帮我配置 AgentFlow` | Interview the user and fill config. |
-| `帮我拆分这个项目` | Analyze requirements and produce a feature table. |
-| `需求在 ...` / `需求图片在 ...` | Import requirements, infer config, then split. |
+| `帮我拆分这个项目` | Analyze requirements, produce architecture, then produce a feature table after confirmation. |
+| `需求在 ...` / `需求图片在 ...` | Import requirements, infer architecture/config, then split after confirmation. |
 | `当前阶段完成，继续下一阶段` | Validate the current gate and advance if allowed. |
 | `继续开发 FEATURE-XXX` | Continue that feature from its recorded state. |
 | `这个 feature 做完了，请收尾` | Manually trigger finish flow when automatic finish did not run. |
@@ -68,6 +68,7 @@ When a decision is needed:
 Examples of decisions requiring confirmation:
 
 - editing `agentflow.config.yml`
+- approving the project architecture direction
 - creating the initial feature bundle set
 - moving from planning to implementation
 - skipping or weakening a gate/check
@@ -113,23 +114,45 @@ Do this:
 2. Convert images into structured requirements first.
 3. Build a project profile: target platforms, roles, sensitive domains,
    third-party module candidates, review strictness, and likely feature types.
-4. Propose `agentflow.config.yml` changes derived from the requirements.
-5. Ask the user to confirm or correct the config proposal.
-6. Ask whether requirement-mentioned modules should be built in-project or
+4. Draft or update `project-docs/01_ARCHITECTURE.md` with:
+   - `Status: draft`
+   - requirement inputs
+   - recommended architecture
+   - alternatives considered
+   - key architecture decisions
+   - config implications
+   - feature planning implications
+   - open questions
+5. Ask only the architecture questions that materially affect stack, data,
+   auth, deployment, security, cost, or delivery. Put other uncertainty in
+   `Open Questions` instead of interrupting the user.
+6. Ask the user to confirm or correct the recommended architecture direction.
+7. After confirmation, update `project-docs/01_ARCHITECTURE.md` to
+   `Status: approved` and run or verify `agentflow architecture check`.
+8. Propose `agentflow.config.yml` changes derived from the approved
+   architecture and requirements.
+9. Ask the user to confirm or correct the config proposal.
+10. Ask whether requirement-mentioned modules should be built in-project or
    imported as third-party modules.
-7. If the user chooses to import a module, run third-party module intake before
+11. If the user chooses to import a module, run third-party module intake before
    finalizing the feature table.
-8. Split into milestones, features, and rough task counts.
-9. Adjust features based on module decisions. For imported modules, create an
+12. Split into milestones, features, and rough task counts.
+13. Adjust features based on module decisions. For imported modules, create an
    integration/governance feature instead of a full build-from-scratch feature.
-10. Suggest feature type for each feature.
-11. Ask the user to confirm the feature table; do not ask them to write create
+14. Suggest feature type for each feature.
+15. Ask the user to confirm the feature table; do not ask them to write create
    commands.
-12. After confirmation, create feature bundles and render the board.
-13. Update `ACTIVE_WORK.md`.
+16. After confirmation, create feature bundles and render the board.
+17. Update `ACTIVE_WORK.md`.
 
 Do not wait for the user to explicitly say "configure YAML" after requirements
 are imported. Configuration review is part of requirement intake.
+
+Do not finalize the initial feature table for a full project while
+`project-docs/01_ARCHITECTURE.md` is still draft, contains `TBD`, or fails
+`agentflow architecture check`. Creating a single ad hoc feature for an already
+running project is allowed, but explain the architecture warning if the CLI
+prints one.
 
 ## Feature Advance
 

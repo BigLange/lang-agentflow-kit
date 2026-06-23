@@ -13,6 +13,114 @@ trap cleanup EXIT
 
 cd "$TMP_ROOT"
 "$ROOT/bin/agentflow" init --profile standard
+if "$ROOT/bin/agentflow" architecture check >/tmp/agentflow-architecture-check-fail.out 2>&1; then
+  printf 'Expected architecture check to fail for draft template\n' >&2
+  exit 1
+fi
+grep -Fq 'Architecture status: draft' /tmp/agentflow-architecture-check-fail.out
+cat > project-docs/01_ARCHITECTURE.md <<'ARCHITECTURE'
+# Architecture
+
+## Architecture Status
+
+Status: approved
+Decision Owner: human
+Last Updated: 2026-06-23
+
+## Requirement Inputs
+
+- Smoke test requirements
+
+## Project Shape
+
+- Product type: internal tool
+- Target users: operators
+- User roles: user, admin
+- Backend: local service
+- Web frontend: browser UI
+- Mobile: none
+- External services: none
+
+## Recommended Architecture
+
+- Architecture pattern: modular monolith
+- Reason: small project with simple deployment
+- Tradeoffs: less distribution flexibility, faster delivery
+
+## Alternatives Considered
+
+| Option | Pros | Cons | Decision |
+| --- | --- | --- | --- |
+| Modular monolith | simple | limited independent scaling | selected |
+
+## Key Architecture Decisions
+
+| Decision | Choice | Reason | Impact |
+| --- | --- | --- | --- |
+| Frontend stack | existing project stack | reuse conventions | lower churn |
+| Backend stack | existing project stack | reuse conventions | lower churn |
+| API style | REST | simple integration | predictable contracts |
+| Data storage | existing database | no new infra | lower cost |
+| Auth model | existing auth | avoid duplicate security logic | lower risk |
+| Permission model | role based | simple operations | clear checks |
+| Deployment model | existing deployment | no new infra | lower risk |
+
+## Module Boundaries
+
+- Feature bundles stay under features.
+
+## Data Flow
+
+- UI calls backend APIs.
+
+## API Boundaries
+
+- See project-docs/02_API_SPEC.md.
+
+## State Management
+
+- Runtime state stays under .agentflow/state.
+
+## Config Implications
+
+| Config | Recommended Value | Reason |
+| --- | --- | --- |
+| implementation.target_sides | backend, frontend | smoke test covers both |
+| workflow.default_type | standard | default delivery flow |
+| review.spec.mode | self | smoke speed |
+| review.plan.mode | self | smoke speed |
+| review.tasks.mode | self | smoke speed |
+| review.implementation.mode | self | smoke speed |
+| testing.manual_acceptance.blocking_level | release | async human QA |
+
+## Feature Planning Implications
+
+- Start with simple smoke features.
+- Sensitive features use extra review.
+- Trivial text fixes can use trivial workflow.
+- No reusable external modules are required first.
+
+## Testing Strategy
+
+- Use smoke scripts and feature checks.
+
+## Deployment Assumptions
+
+- Local smoke environment.
+
+## Risks
+
+- Security: standard review gates.
+- Data: no production data in smoke.
+- Integration: local-only integration.
+- Performance: not load tested in smoke.
+- Delivery: CI should run smoke scripts.
+
+## Open Questions
+
+- None for smoke.
+ARCHITECTURE
+"$ROOT/bin/agentflow" architecture check
 "$ROOT/bin/agentflow" feature create "fix login text" --type trivial
 "$ROOT/bin/agentflow" feature create "fix pagination bug" --type bug
 "$ROOT/bin/agentflow" feature create "admin permission system" --type sensitive

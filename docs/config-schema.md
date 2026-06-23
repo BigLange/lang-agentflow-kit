@@ -11,6 +11,15 @@
 - 是否启用第三方模块复用检查
 - 是否在特定阶段自动运行命令
 
+完整项目第一次从需求拆分 feature 前，Manager 应先根据需求生成并确认
+`project-docs/01_ARCHITECTURE.md`，再把架构结论转成配置建议。可以运行：
+
+```sh
+agentflow architecture check
+```
+
+该命令会检查架构文档是否 `Status: approved`，以及是否还包含 `TBD` 或模板占位符。
+
 当前 CLI 解析器比较轻量，请尽量使用简单、清晰的 YAML。
 
 ## 最常改的配置

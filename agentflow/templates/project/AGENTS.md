@@ -34,7 +34,13 @@ The default runtime model is subagent-only.
   when present. Short user requests such as "continue development", "split this
   project", "current stage is done, continue", or "add this module" are enough;
   the Manager must ask missing questions and run the required CLI checks.
-- After requirements are imported, the Manager must infer project configuration
+- After requirements are imported, the Manager must draft
+  `project-docs/01_ARCHITECTURE.md`, ask only architecture questions that
+  materially affect the project direction, and get human confirmation before
+  finalizing the feature table. The architecture document should record the
+  recommendation, alternatives, config implications, feature planning
+  implications, risks, and open questions.
+- After architecture confirmation, the Manager must infer project configuration
   and third-party module candidates before finalizing the feature table. If the
   user chooses to import a module, adjust the feature plan before creating
   feature bundles.
@@ -56,8 +62,10 @@ For a new project, first complete the project-level documents:
 - `project-docs/02_API_SPEC.md`
 - `project-docs/03_TASK_BOARD.md`
 
-If `00_PROJECT_CONTEXT.md` or `01_ARCHITECTURE.md` contains `TBD`, the Manager
-must clarify or draft those documents before implementation work begins.
+If `00_PROJECT_CONTEXT.md` or `01_ARCHITECTURE.md` contains `TBD`, or
+`01_ARCHITECTURE.md` is not `Status: approved`, the Manager must clarify or
+draft those documents before full project feature splitting or implementation
+work begins.
 
 ## 3. Role Families
 
@@ -112,9 +120,13 @@ must clarify or draft those documents before implementation work begins.
 For a new project:
 
 1. Complete project context.
-2. Complete architecture and API boundaries.
-3. Create milestones and initial task board.
-4. Split work into features only after the project-level plan is clear.
+2. Draft architecture from requirements.
+3. Ask the user to confirm architecture direction and resolve only material
+   open questions.
+4. Mark `project-docs/01_ARCHITECTURE.md` as `Status: approved`.
+5. Complete API boundaries.
+6. Create milestones and initial task board.
+7. Split work into features only after the project-level plan is clear.
 
 For a feature:
 
