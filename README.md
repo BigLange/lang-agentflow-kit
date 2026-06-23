@@ -1,6 +1,6 @@
 # Lang AgentFlow Kit
 
-当前版本：`1.0.0`
+当前版本：`1.1.0`
 
 Lang AgentFlow Kit 是一个面向 AI 辅助软件项目的本地工作流初始化工具。它会创建以 subagent 为优先的项目结构、Markdown 工作合同，以及轻量级 CLI 守卫能力，让长期 AI 协作具备清晰的状态、交接点和审查检查点。
 
@@ -32,9 +32,9 @@ AI 辅助项目一旦跨越多个会话，往往会发生漂移：spec 没写完
 AgentFlow 给项目提供一份小而明确的本地合同：
 
 - `AGENTS.md` 告诉 agent 如何在当前仓库工作。
-- `project-docs/` 存放项目上下文、架构说明、API 说明和任务板。
+- `project-docs/` 存放项目上下文、架构说明、API 说明、任务板和人工验收清单。
 - `project-docs/ACTIVE_WORK.md` 记录当前 feature/task/stage，作为新会话恢复入口。
-- `features/FEATURE-XXX-*` 存放 feature 级 spec、plan、tasks、results 和 archive。
+- `features/FEATURE-XXX-*` 存放 feature 级 spec、plan、tasks、模型路由、测试资产、results 和 archive。
 - `agentflow` CLI 检查 gate、写入 active context、渲染任务板并报告状态。
 
 ## 适用场景
@@ -150,6 +150,9 @@ features/FEATURE-XXX/state.yml
 | `agentflow feature create "user auth"` | 创建新的 feature bundle。 |
 | `agentflow feature status FEATURE-001-user-auth` | 查看 feature 状态和下一道 gate。 |
 | `agentflow feature next FEATURE-001-user-auth` | 尝试推进下一步工作流。 |
+| `agentflow stage plan FEATURE-001-user-auth --stage spec --adapter codex` | 生成 spec/plan/tasks 等前置阶段的 Codex prompt。 |
+| `agentflow dispatch plan FEATURE-001-user-auth --adapter codex` | 生成 Codex 子代理分派计划和 prompt。 |
+| `agentflow dispatch run FEATURE-001-user-auth --adapter codex` | dry-run 显示 Codex 分派脚本；加 `--execute` 才执行。 |
 | `agentflow board render --check` | 验证生成任务板是否最新。 |
 
 更完整的 `gate`、`check`、`context`、外部模块治理和复用检查命令，请先看 [`docs/user-manual.md`](docs/user-manual.md)。
@@ -239,6 +242,7 @@ project-docs/
   01_ARCHITECTURE.md
   02_API_SPEC.md
   03_TASK_BOARD.md
+  04_MANUAL_ACCEPTANCE.md
   ACTIVE_WORK.md
 features/
   FEATURE-001-customer-export/
@@ -246,6 +250,10 @@ features/
     spec.md
     plan.md
     tasks.md
+    model-routing.md
+    test-cases.md
+    test-results.md
+    manual-acceptance.md
     implementation/
     results/
     archive.md
@@ -299,6 +307,8 @@ updated_at: "2026-06-05"
 - 从 feature state 渲染 `project-docs/03_TASK_BOARD.md`。
 - 检查 feature gate 并报告 blockers。
 - 生成用于 agent 交接的 active context。
+- 生成 feature 级 AI 测试用例/结果，并维护项目级人工验收清单。
+- 生成 feature/task 级模型路由建议，用 `low`、`medium`、`high`、`extra-high` reasoning 档位指导 subagent 分派。
 - 生成 `project-docs/ACTIVE_WORK.md`，让 Manager 可以跨会话恢复当前 feature/task/stage。
 - 通过 `agentflow doctor` 运行本地健康检查。
 - 生成 warning-mode Git hooks 和 GitHub Actions 模板。

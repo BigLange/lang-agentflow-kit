@@ -335,8 +335,11 @@ Manager 应该自动：
 ```text
 确认当前 feature 的实现任务已完成
 -> 检查是否还有 blocker
+-> 根据 model-routing.md 确认实现、测试、审查使用哪个模型档位
 -> 调度 Test Agent 或新会话运行测试/验证
--> 写 test.md
+-> 生成或更新 test-cases.md
+-> 执行 AI/自动化可验证的测试并写 test-results.md 和 implementation/test.md
+-> 把网页/App/E2E 等人工项汇总到 project-docs/04_MANUAL_ACCEPTANCE.md，默认允许 pending
 -> 调度 Code Reviewer 或独立会话做审查
 -> 写 review.md
 -> 如果发现 blocker，调度 Fix Agent 修复，再重新测试和审查
@@ -348,9 +351,15 @@ Manager 应该自动：
 
 | 文件 | 作用 | 用户需要做什么 |
 | --- | --- | --- |
+| `test-cases.md` | feature 内 AI/自动化测试用例资产 | 看 AI 测试覆盖是否合理 |
+| `test-results.md` | AI/自动化测试执行摘要、通过/失败和证据 | 看失败项是否已进入修复 |
+| `project-docs/04_MANUAL_ACCEPTANCE.md` | 项目级人工 QA、网页/App 体验和最终验收清单 | 可以在里程碑或项目结束后集中更新，不用逐个翻 feature |
+| `manual-acceptance.md` | feature 对项目级人工验收的本地引用和状态摘要 | 通常由 Manager 维护 |
 | `implementation/test.md` | 记录跑了哪些测试、结果是否通过、还有什么没测 | 看 Manager 是否真的跑了可信检查 |
 | `implementation/review.md` | 记录审查结论、阻塞问题、风险 | 如果有 blocker，等 Manager 修完再确认 |
 | `archive.md` | 记录这个 feature 最终交付了什么、改了哪些文件、剩余风险 | 确认摘要是否符合预期 |
+
+AI 测试是强制同步流程：只要 feature 类型包含 `test` 阶段，Manager 必须让 Test Agent 生成测试用例、执行能自动化的单元/API/集成/压力等测试，并留下结果。人工验收是异步流程：网页、App、真机、视觉体验、多步骤业务链路等统一进入 `project-docs/04_MANUAL_ACCEPTANCE.md`，可以保持 `pending`，等大模块、里程碑或项目整体开发结束后由人工集中确认。
 
 如果测试失败，Manager 不应该直接归档。它应该说明：
 
@@ -382,6 +391,58 @@ Manager 应该自动：
 | Commit/Archive Agent | 整理 `archive.md` 和最终摘要 |
 
 这样 Manager 保持轻量，只看结论、blocker 和下一步，不把长日志和实现细节长期留在主上下文里。
+
+## 模型路由怎么用
+
+AgentFlow 用 `low`、`medium`、`high`、`extra-high` 四个中性 reasoning 档位表达 subagent 模型选择。具体怎么映射到 Codex、Claude Code 或其他工具，由 `agentflow.config.yml` 的 `subagents.model_profiles` 决定。
+
+| 档位 | 适合 |
+| --- | --- |
+| `low` | 文档、归档、低风险机械改动、极小 trivial task |
+| `medium` | 普通 bug、标准实现、常规 AI 测试 |
+| `high` | major feature、复杂问题、架构、审查和高风险修复 |
+| `extra-high` | sensitive feature、安全、权限、支付、用户数据和关键隔离逻辑 |
+
+创建 feature 后会生成 `model-routing.md`。Manager 拆 tasks 时应给任务补充
+`complexity`、`risk` 和 `model_profile`，并把 `dispatch.md` 里的角色分派到对应
+档位。用户可以直接指定某个 feature 或 task 使用更强或更便宜的档位，人工指定优先。
+
+前置阶段也走同一套路由。Manager 可以为 spec、plan、tasks 生成阶段 subagent
+计划：
+
+```sh
+agentflow stage plan FEATURE-001-user-auth --stage spec --adapter codex
+agentflow stage plan FEATURE-001-user-auth --stage plan --adapter codex
+agentflow stage plan FEATURE-001-user-auth --stage tasks --adapter codex
+```
+
+和 dispatch 一样，`stage run` 默认 dry-run，只有加 `--execute` 才实际调用 Codex：
+
+```sh
+agentflow stage run FEATURE-001-user-auth --stage spec --adapter codex --execute
+```
+
+Codex adapter 可以先生成分派计划，不直接执行：
+
+```sh
+agentflow dispatch plan FEATURE-001-user-auth --adapter codex
+```
+
+它会在 `project-docs/records/dispatch/` 下生成每个 subagent 的 prompt 和
+`run-codex-dispatch.sh`。默认运行命令只是 dry-run：
+
+```sh
+agentflow dispatch run FEATURE-001-user-auth --adapter codex
+```
+
+确认无误后才用：
+
+```sh
+agentflow dispatch run FEATURE-001-user-auth --adapter codex --execute
+```
+
+执行时 adapter 会把 `low`、`medium`、`high`、`extra-high` 映射到 Codex 的
+`model_reasoning_effort` 配置。
 
 ## 备用命令
 

@@ -7,6 +7,16 @@
 
 ## Delivery-Oriented Task Breakdown
 
+Each task should keep explicit routing metadata when the Manager expands this
+template:
+
+```text
+owner: Backend Implementer
+complexity: trivial | standard | major
+risk: low | medium | high | critical
+model_profile: low | medium | high | extra-high
+```
+
 ### Phase 1: API / Interface Design
 
 - [ ] T001 Define API/contracts and update relevant documentation
@@ -35,3 +45,7 @@
 ## Acceptance Mapping
 
 - TBD
+
+## Model Routing
+
+- See `model-routing.md`.

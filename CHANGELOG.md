@@ -1,6 +1,6 @@
 # 变更日志
 
-## Unreleased
+## 1.1.0 - 2026-06-23
 
 ### 新增
 
@@ -10,6 +10,38 @@
 - 新增针对公共模块 direct-copy、公共高风险 vendor、公共 critical-domain reuse 的静态策略检查。
 - 新增 feature 级 `reuse-analysis.md` 和 `external-module-risk.md` 生成。
 - 新增外部模块 smoke test。
+- 新增 feature 级 AI 测试资产：`test-cases.md`、`test-results.md` 和 `manual-acceptance.md`。
+- 新增项目级人工验收总表：`project-docs/04_MANUAL_ACCEPTANCE.md`。
+- 新增 `model-routing.md`，覆盖 spec/plan/tasks 前置阶段和 dispatch 后实现任务的模型档位建议。
+- 新增中性 reasoning 档位：`low`、`medium`、`high`、`extra-high`。
+- 新增 Codex adapter 计划命令：`agentflow stage plan/run ... --adapter codex` 和 `agentflow dispatch plan/run ... --adapter codex`。
+- 新增 Codex dispatch/stage prompt 模板。
+
+### 变更
+
+- `agentflow feature context` 现在输出 stage-aware `context_mode`、`must_read` 和 `optional_files`，降低每轮上下文读取成本。
+- `dispatch.md` 模板新增 `Model Profile` 列。
+- `tasks.md` 模板新增 `complexity`、`risk` 和 `model_profile` 元数据约定。
+- test gate 现在检查 AI 测试用例和测试结果，同时允许人工验收异步 pending。
+- smoke test 覆盖 `AGENTS.md` 生成、测试资产、人工验收总表、模型路由和 Codex adapter 计划生成。
+
+## 1.0.0 - 2026-06-11
+
+Manager workflow 稳定版本。
+
+### 新增
+
+- 新增 `project-docs/ACTIVE_WORK.md`，作为人和 AI Manager 的跨会话恢复入口。
+- 新增 `.agentflow/skills/agentflow-manager-workflow`，固化 Manager 日常工作流。
+- 新增 `manager.resume_prompt`、`manager.heartbeat_phrase` 和 `manager.heartbeat_mode` 配置。
+- 新增 Manager 配置注释和确认协议：AI 修改 YAML 前必须解释原因、字段和影响，等用户确认后再改。
+- 新增需求导入后的配置评估、第三方模块候选识别和模块引入确认流程。
+
+### 变更
+
+- README、用户手册、配置指南和产品介绍围绕短指令 Manager workflow 重写。
+- 初始化流程会生成 `project-docs/ACTIVE_WORK.md`。
+- Manager 结束每轮工作时应更新 ACTIVE_WORK 并输出心跳。
 
 ## 0.6.0 - 2026-06-05
 

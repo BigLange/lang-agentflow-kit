@@ -258,6 +258,46 @@ frontend
 mobile
 ```
 
+### `subagents`
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `subagents.default_model_profile` | `medium` | Manager 无法判断时使用的默认模型档位。 |
+| `subagents.model_profiles` | `low`, `medium`, `high`, `extra-high` | 中性 reasoning 档位到具体 provider/model 参数的项目级映射。 |
+| `subagents.routing_rules` | 按 feature type 映射 | 创建 feature 时生成 `model-routing.md` 的默认依据。 |
+
+当前 CLI 只生成和检查路由建议，不直接调用外部模型。Manager 或外部 adapter
+应读取 `model-routing.md`、`dispatch.md` 和 task metadata，再把 `low`、
+`medium`、`high`、`extra-high` 映射到实际可用 provider 的参数。Codex 可以映射
+reasoning effort；Claude Code 或其他工具可以映射到它们自己的模型名、计划模式
+或子代理配置。
+
+内置 Codex adapter 支持：
+
+```sh
+agentflow stage plan FEATURE-XXX --stage spec --adapter codex
+agentflow stage run FEATURE-XXX --stage spec --adapter codex
+agentflow stage run FEATURE-XXX --stage spec --adapter codex --execute
+agentflow dispatch plan FEATURE-XXX --adapter codex
+agentflow dispatch run FEATURE-XXX --adapter codex
+agentflow dispatch run FEATURE-XXX --adapter codex --execute
+```
+
+`stage` 用于 spec/plan/tasks/review 等前置阶段，`dispatch` 用于实现、测试、
+审查、修复、归档这些分派任务。`run` 默认只提示脚本路径，只有加 `--execute`
+才实际调用 `codex exec`。
+
+### `testing`
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `testing.ai_required` | `true` | AI/自动化测试是否作为 feature 级强制闭环。 |
+| `testing.require_test_cases` | `true` | test 阶段是否要求独立 `test-cases.md`。 |
+| `testing.require_test_results` | `true` | test 阶段是否要求独立 `test-results.md`。 |
+| `testing.manual_acceptance.enabled` | `true` | 是否生成并维护项目级人工验收清单。 |
+| `testing.manual_acceptance.blocking_level` | `release` | 人工验收通常在 feature 之后集中处理，可按 milestone/release 卡口使用。 |
+| `testing.manual_acceptance.allow_pending_before_archive` | `true` | 允许 feature 归档时人工验收仍为 pending。 |
+
 ### `gates`
 
 | 字段 | 说明 |
@@ -377,6 +417,16 @@ after_fix
 | `review` | 代码或实现审查 |
 | `fix` | 修复测试或审查发现的问题 |
 | `archive` | 归档结果、变更、测试和风险 |
+
+test 阶段会检查 `test-cases.md`、`test-results.md` 和
+`implementation/test.md` 的 AI/自动化测试记录。人工 QA、网页/App 体验和
+最终验收项统一汇总在 `project-docs/04_MANUAL_ACCEPTANCE.md`，feature 内的
+`manual-acceptance.md` 只保留本地摘要，允许保持 `Status: pending`，用于后续
+人工 QA 或产品验收集中更新。
+
+dispatch 阶段会检查 `model-routing.md`。Manager 应在分派前确认每个任务的
+`complexity`、`risk` 和 `model_profile`，高风险或敏感任务应提升到 `high` 或
+`extra-high`。
 
 ## 只作说明的字段
 

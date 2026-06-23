@@ -12,17 +12,18 @@ You are the Manager. Read AGENTS.md and project-docs/ACTIVE_WORK.md, then contin
 
 - Current Feature: none
 - Current Stage: documentation
-- Current Task: simplify AgentFlow usage and add resume workflow
+- Current Task: add AI test assets, manual acceptance board, model routing, and Codex adapter
 - Current Owner Role: Manager
 - Work Status: ready-for-review
 - Human Needed: yes
-- Last Updated: 2026-06-11
+- Last Updated: 2026-06-23
 
 ## Current Work Queue
 
 | Task | Title | Owner | Backend | Frontend | Mobile | Test | Status | Next |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | DOC-001 | Add ACTIVE_WORK resume workflow | Manager | n/a | n/a | n/a | check-passed | ready-for-review | human review, then commit if approved |
+| RUNTIME-001 | Add testing assets, manual acceptance, model routing, and Codex adapter | Manager | n/a | n/a | n/a | check-passed | ready-for-review | human review, then commit if approved |
 
 Status values:
 
@@ -53,6 +54,13 @@ Status values:
 - Added requirement-intake flow: after requirements are imported, Manager must infer YAML config, identify third-party module candidates, ask for confirmation, and adjust feature planning when modules are imported.
 - Clarified feature finish flow: Manager should automatically start test/review/archive when implementation is complete, delegate detailed work to focused roles, and keep Manager context small.
 - Bumped package and docs version from 0.6.0 to 1.0.0 to mark the stabilized Manager workflow release.
+- Added feature-level AI test assets: `test-cases.md`, `test-results.md`, and `manual-acceptance.md`.
+- Added project-level manual acceptance board: `project-docs/04_MANUAL_ACCEPTANCE.md`.
+- Added `model-routing.md` with stage routing and dispatch task routing.
+- Added neutral reasoning profiles: `low`, `medium`, `high`, and `extra-high`.
+- Added Codex stage and dispatch plan/run adapter commands.
+- Added stage-aware active context fields to reduce repeated prompt reading.
+- Bumped package and docs version from 1.0.0 to 1.1.0.
 
 ## Last Checks Run
 
@@ -69,6 +77,9 @@ agentflow init --profile standard smoke: passed with Skill frontmatter copied
 npm run check: passed after requirement-intake config/module flow update
 npm run check: passed after automatic finish/delegation update
 npm run check: passed after 1.0.0 version bump
+npm run check: passed after test/model-routing/Codex adapter updates
+npm run smoke: passed after test/model-routing/Codex adapter updates
+npm run smoke:external-modules: passed after test/model-routing/Codex adapter updates
 ```
 
 ## Current Blockers

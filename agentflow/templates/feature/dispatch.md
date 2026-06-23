@@ -9,16 +9,16 @@ receives only the relevant bundle files and target paths.
 
 ## Role Assignments
 
-| Task | Role | Inputs | Outputs | Status |
-| --- | --- | --- | --- | --- |
-| API design | API Designer | spec.md, plan.md | implementation/api.md | pending |
-| Backend | Backend Implementer | plan.md, implementation/api.md | code + results/backend.md | pending |
-| Frontend | Frontend Implementer | plan.md, implementation/api.md | code + results/frontend.md | pending |
-| Mobile | Mobile Implementer | plan.md, implementation/api.md | code + results/mobile.md | optional |
-| Tests | Test Agent | spec.md, tasks.md, changed files | implementation/test.md | pending |
-| Review | Code Reviewer | spec.md, plan.md, diff | implementation/review.md | pending |
-| Fix | Fix Agent | review/test findings | code + results/fix.md | pending |
-| Commit | Commit Agent | final diff, test output | archive.md | pending |
+| Task | Role | Model Profile | Inputs | Outputs | Status |
+| --- | --- | --- | --- | --- | --- |
+| API design | API Designer | {{MODEL_PROFILE}} | spec.md, plan.md, model-routing.md | implementation/api.md | pending |
+| Backend | Backend Implementer | {{MODEL_PROFILE}} | plan.md, implementation/api.md, model-routing.md | code + results/backend.md | pending |
+| Frontend | Frontend Implementer | {{MODEL_PROFILE}} | plan.md, implementation/api.md, model-routing.md | code + results/frontend.md | pending |
+| Mobile | Mobile Implementer | {{MODEL_PROFILE}} | plan.md, implementation/api.md, model-routing.md | code + results/mobile.md | optional |
+| Tests | Test Agent | {{MODEL_PROFILE}} | spec.md, tasks.md, changed files, model-routing.md | implementation/test.md | pending |
+| Review | Code Reviewer | high | spec.md, plan.md, diff, model-routing.md | implementation/review.md | pending |
+| Fix | Fix Agent | {{MODEL_PROFILE}} | review/test findings, model-routing.md | code + results/fix.md | pending |
+| Commit | Commit Agent | low | final diff, test output | archive.md | pending |
 
 ## Persistent Records
 

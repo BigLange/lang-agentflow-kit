@@ -377,7 +377,7 @@ lang-agentflow-kit/
 
 ## 推荐版本路线
 
-当前发布版本是 `1.0.0`。下面较旧的 “v0.2: YAML truly controls execution” 说明作为历史路线规划保留。
+当前发布版本是 `1.1.0`。下面较旧的 “v0.2: YAML truly controls execution” 说明作为历史路线规划保留。
 
 ### v0.2.x: YAML Truly Controls Execution
 

@@ -42,6 +42,10 @@ Advanced feature commands:
   bin/agentflow feature context FEATURE-001-title
   bin/agentflow feature sync FEATURE-001-title
   bin/agentflow feature dispatch FEATURE-001-title
+  bin/agentflow stage plan FEATURE-001-title --stage spec|plan|tasks [--adapter codex]
+  bin/agentflow stage run FEATURE-001-title --stage spec|plan|tasks [--adapter codex] [--execute]
+  bin/agentflow dispatch plan FEATURE-001-title [--adapter codex]
+  bin/agentflow dispatch run FEATURE-001-title [--adapter codex] [--execute]
   bin/agentflow feature archive FEATURE-001-title
   bin/agentflow board render
   bin/agentflow board render --check
@@ -608,6 +612,58 @@ render_template() {
   ' "$src" > "$dest"
 }
 
+model_profile_for_feature_type() {
+  local type="$1"
+  case "$type" in
+    trivial) printf 'low' ;;
+    bug|standard) printf 'medium' ;;
+    major) printf 'high' ;;
+    sensitive) printf 'extra-high' ;;
+    *) printf 'medium' ;;
+  esac
+}
+
+routing_reason_for_feature_type() {
+  local type="$1"
+  case "$type" in
+    trivial) printf 'trivial feature: low-risk, small-scope work can use low reasoning unless task metadata says otherwise' ;;
+    bug) printf 'bug feature: default to medium for diagnosis and verification, escalate sensitive fixes to high or extra-high' ;;
+    standard) printf 'standard feature: default to medium for implementation and tests, escalate high-risk roles to high' ;;
+    major) printf 'major feature: use high by default because scope and cross-module impact are higher' ;;
+    sensitive) printf 'sensitive feature: use extra-high by default for security, user data, permissions, payment, or external module risk' ;;
+    *) printf 'unknown feature type: default to medium until Manager assigns explicit routing metadata' ;;
+  esac
+}
+
+render_feature_template() {
+  local src="$1"
+  local dest="$2"
+  local title="$3"
+  local request="${4:-$title}"
+  local feature_type="${5:-standard}"
+  local model_profile routing_reason
+  model_profile="$(model_profile_for_feature_type "$feature_type")"
+  routing_reason="$(routing_reason_for_feature_type "$feature_type")"
+  awk -v title="$title" -v request="$request" -v feature_type="$feature_type" -v model_profile="$model_profile" -v routing_reason="$routing_reason" '
+    function replace_all(line, token, value, out, i) {
+      out = ""
+      while ((i = index(line, token)) > 0) {
+        out = out substr(line, 1, i - 1) value
+        line = substr(line, i + length(token))
+      }
+      return out line
+    }
+    {
+      line = replace_all($0, "{{FEATURE_TITLE}}", title)
+      line = replace_all(line, "{{USER_REQUEST}}", request)
+      line = replace_all(line, "{{FEATURE_TYPE}}", feature_type)
+      line = replace_all(line, "{{MODEL_PROFILE}}", model_profile)
+      line = replace_all(line, "{{ROUTING_REASON}}", routing_reason)
+      print line
+    }
+  ' "$src" > "$dest"
+}
+
 render_vars() {
   local src="$1"
   local dest="$2"
@@ -632,6 +688,250 @@ render_vars() {
       print line
     }
   ' "$src" > "$dest"
+}
+
+render_codex_prompt() {
+  local dest="$1"
+  local feature="$2"
+  local task="$3"
+  local role="$4"
+  local model_profile="$5"
+  local inputs="$6"
+  local outputs="$7"
+  awk -v feature="$feature" -v task="$task" -v role="$role" -v model_profile="$model_profile" -v inputs="$inputs" -v outputs="$outputs" '
+    function replace_all(line, token, value, out, i) {
+      out = ""
+      while ((i = index(line, token)) > 0) {
+        out = out substr(line, 1, i - 1) value
+        line = substr(line, i + length(token))
+      }
+      return out line
+    }
+    {
+      line = replace_all($0, "{{FEATURE}}", feature)
+      line = replace_all(line, "{{TASK}}", task)
+      line = replace_all(line, "{{ROLE}}", role)
+      line = replace_all(line, "{{MODEL_PROFILE}}", model_profile)
+      line = replace_all(line, "{{INPUTS}}", inputs)
+      line = replace_all(line, "{{OUTPUTS}}", outputs)
+      print line
+    }
+  ' "$TEMPLATE_DIR/adapters/codex-dispatch-prompt.md" > "$dest"
+}
+
+codex_reasoning_config_for_profile() {
+  local profile="$1"
+  case "$profile" in
+    low|medium|high|extra-high) printf 'model_reasoning_effort="%s"' "$profile" ;;
+    *) printf 'model_reasoning_effort="medium"' ;;
+  esac
+}
+
+dispatch_plan_dir() {
+  local task_id="$1"
+  printf '%s/records/dispatch/%s_codex_plan' "$DOCS_DIR" "$task_id"
+}
+
+stage_plan_dir() {
+  local task_id="$1"
+  local stage="$2"
+  printf '%s/records/dispatch/%s_codex_stage_%s' "$DOCS_DIR" "$task_id" "$stage"
+}
+
+parse_dispatch_rows() {
+  local dispatch_file="$1"
+  awk -F'|' '
+    /^\|/ {
+      task = $2
+      role = $3
+      profile = $4
+      inputs = $5
+      outputs = $6
+      status = $7
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", task)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", role)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", profile)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", inputs)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", outputs)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", status)
+      if (task == "Task" || task ~ /^---/ || task == "") next
+      print task "\t" role "\t" profile "\t" inputs "\t" outputs "\t" status
+    }
+  ' "$dispatch_file"
+}
+
+parse_stage_routing_row() {
+  local routing_file="$1"
+  local target_stage="$2"
+  awk -F'|' -v target="$target_stage" '
+    /^\|/ {
+      stage = $2
+      role = $3
+      complexity = $4
+      risk = $5
+      profile = $6
+      inputs = $7
+      outputs = $8
+      reason = $9
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", stage)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", role)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", profile)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", inputs)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", outputs)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", reason)
+      if (stage == target) {
+        print stage "\t" role "\t" profile "\t" inputs "\t" outputs "\t" reason
+        found = 1
+        exit
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$routing_file"
+}
+
+stage_codex_plan() {
+  local feature="$1"
+  local stage="$2"
+  local dir title task_id plan_dir script plan_file prompt_file row parsed_stage role profile inputs outputs reason config_arg
+  dir="$(feature_path "$feature")"
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  load_project_paths
+
+  if [[ ! -f "$dir/model-routing.md" ]]; then
+    printf 'Missing model routing file: %s\n' "$dir/model-routing.md" >&2
+    return 1
+  fi
+
+  row="$(parse_stage_routing_row "$dir/model-routing.md" "$stage" || true)"
+  if [[ -z "$row" ]]; then
+    printf 'No stage routing row for stage %s in %s\n' "$stage" "$dir/model-routing.md" >&2
+    return 1
+  fi
+
+  IFS=$'\t' read -r parsed_stage role profile inputs outputs reason <<< "$row"
+  plan_dir="$(stage_plan_dir "$task_id" "$stage")"
+  mkdir -p "$plan_dir"
+  script="$plan_dir/run-codex-stage.sh"
+  plan_file="$plan_dir/plan.md"
+  prompt_file="$plan_dir/01-$(slugify "$stage").md"
+  config_arg="$(codex_reasoning_config_for_profile "$profile")"
+
+  render_codex_prompt "$prompt_file" "$title" "$stage" "$role" "$profile" "$inputs" "$outputs"
+
+  {
+    printf '# Codex Stage Plan: %s / %s\n\n' "$title" "$stage"
+    printf 'Generated from `%s`.\n\n' "$dir/model-routing.md"
+    printf '| Stage | Role | Model Profile | Prompt | Command |\n'
+    printf '| --- | --- | --- | --- | --- |\n'
+    printf '| %s | %s | %s | %s | `codex exec -C %s -c %s - < %s` |\n' \
+      "$stage" "$role" "$profile" "$prompt_file" "$PROJECT_ROOT" "$config_arg" "$prompt_file"
+  } > "$plan_file"
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'set -euo pipefail\n\n'
+    printf 'cd %q\n\n' "$PROJECT_ROOT"
+    printf 'codex exec -C %q -c %q - < %q\n' "$PROJECT_ROOT" "$config_arg" "$prompt_file"
+  } > "$script"
+  chmod +x "$script"
+
+  printf 'Wrote Codex stage plan: %s\n' "$plan_file"
+  printf 'Wrote Codex stage script: %s\n' "$script"
+}
+
+stage_codex_run() {
+  local feature="$1"
+  local stage="$2"
+  local execute="$3"
+  local dir title task_id script
+  dir="$(feature_path "$feature")"
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  script="$(stage_plan_dir "$task_id" "$stage")/run-codex-stage.sh"
+
+  if [[ ! -f "$script" ]]; then
+    stage_codex_plan "$feature" "$stage"
+  fi
+
+  if [[ "$execute" == "true" ]]; then
+    printf 'Executing Codex stage script: %s\n' "$script"
+    "$script"
+  else
+    printf 'Dry run. Review and execute with:\n'
+    printf '  %s\n' "$script"
+    printf 'or run: agentflow stage run %s --stage %s --adapter codex --execute\n' "$title" "$stage"
+  fi
+}
+
+dispatch_codex_plan() {
+  local feature="$1"
+  local dir title task_id plan_dir script plan_file prompt_file task role profile inputs outputs status idx config_arg
+  dir="$(feature_path "$feature")"
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  load_project_paths
+
+  if [[ ! -f "$dir/dispatch.md" ]]; then
+    printf 'Missing dispatch file: %s\n' "$dir/dispatch.md" >&2
+    return 1
+  fi
+
+  plan_dir="$(dispatch_plan_dir "$task_id")"
+  mkdir -p "$plan_dir"
+  script="$plan_dir/run-codex-dispatch.sh"
+  plan_file="$plan_dir/plan.md"
+  idx=0
+
+  {
+    printf '# Codex Dispatch Plan: %s\n\n' "$title"
+    printf 'Generated from `%s`.\n\n' "$dir/dispatch.md"
+    printf '| ID | Task | Role | Model Profile | Prompt | Command |\n'
+    printf '| --- | --- | --- | --- | --- | --- |\n'
+  } > "$plan_file"
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'set -euo pipefail\n\n'
+    printf 'cd %q\n\n' "$PROJECT_ROOT"
+  } > "$script"
+
+  while IFS=$'\t' read -r task role profile inputs outputs status; do
+    idx=$((idx + 1))
+    prompt_file="$plan_dir/$(printf '%02d' "$idx")-$(slugify "$task").md"
+    config_arg="$(codex_reasoning_config_for_profile "$profile")"
+    render_codex_prompt "$prompt_file" "$title" "$task" "$role" "$profile" "$inputs" "$outputs"
+    printf '| %02d | %s | %s | %s | %s | `codex exec -C %s -c %s - < %s` |\n' \
+      "$idx" "$task" "$role" "$profile" "$prompt_file" "$PROJECT_ROOT" "$config_arg" "$prompt_file" >> "$plan_file"
+    printf 'codex exec -C %q -c %q - < %q\n' "$PROJECT_ROOT" "$config_arg" "$prompt_file" >> "$script"
+  done < <(parse_dispatch_rows "$dir/dispatch.md")
+
+  chmod +x "$script"
+  printf 'Wrote Codex dispatch plan: %s\n' "$plan_file"
+  printf 'Wrote Codex dispatch script: %s\n' "$script"
+}
+
+dispatch_codex_run() {
+  local feature="$1"
+  local execute="$2"
+  local dir title task_id script
+  dir="$(feature_path "$feature")"
+  title="$(basename "$dir")"
+  task_id="$(task_id_from_title "$title")"
+  script="$(dispatch_plan_dir "$task_id")/run-codex-dispatch.sh"
+
+  if [[ ! -f "$script" ]]; then
+    dispatch_codex_plan "$feature"
+  fi
+
+  if [[ "$execute" == "true" ]]; then
+    printf 'Executing Codex dispatch script: %s\n' "$script"
+    "$script"
+  else
+    printf 'Dry run. Review and execute with:\n'
+    printf '  %s\n' "$script"
+    printf 'or run: agentflow dispatch run %s --adapter codex --execute\n' "$title"
+  fi
 }
 
 state_features_file() {
@@ -1505,6 +1805,26 @@ done_record_path() {
   printf '%s/records/done/%s_done.md' "$DOCS_DIR" "$task_id"
 }
 
+manual_acceptance_board_path() {
+  printf '%s/04_MANUAL_ACCEPTANCE.md' "$DOCS_DIR"
+}
+
+append_manual_acceptance_feature() {
+  local feature_name="$1"
+  local feature_title="$2"
+  local board case_id
+  board="$(manual_acceptance_board_path)"
+  case_id="MA-${feature_name#FEATURE-}"
+
+  [[ -f "$board" ]] || cp "$TEMPLATE_DIR/project-docs/04_MANUAL_ACCEPTANCE.md" "$board"
+  if grep -Fq "| $case_id |" "$board"; then
+    return
+  fi
+
+  printf '| %s | %s | Define human QA scenarios for %s | Manual expectations documented | pending | Awaiting QA case design | n/a |\n' \
+    "$case_id" "$feature_name" "$feature_title" >> "$board"
+}
+
 ensure_gitignore_line() {
   local file="$1"
   local line="$2"
@@ -1552,6 +1872,10 @@ ensure_runtime_dirs() {
 
   if [[ ! -f "$DOCS_DIR/ACTIVE_WORK.md" ]]; then
     cp "$TEMPLATE_DIR/project-docs/ACTIVE_WORK.md" "$DOCS_DIR/ACTIVE_WORK.md"
+  fi
+
+  if [[ ! -f "$(manual_acceptance_board_path)" ]]; then
+    cp "$TEMPLATE_DIR/project-docs/04_MANUAL_ACCEPTANCE.md" "$(manual_acceptance_board_path)"
   fi
 
   ensure_features_state
@@ -1649,46 +1973,51 @@ create_feature() {
   mkdir -p "$dir/implementation" "$dir/results" "$dir/reviews"
 
   if workflow_stages_for_type "$type" | grep -Fxq "spec"; then
-    render_template "$TEMPLATE_DIR/feature/spec.md" "$dir/spec.md" "$request" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/spec.md" "$dir/spec.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "spec" && [[ "$(config_bool "gates" "require_spec_review" "true")" == "true" ]]; then
-    render_template "$TEMPLATE_DIR/feature/spec-review.md" "$dir/spec-review.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/spec-review.md" "$dir/spec-review.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "plan"; then
-    render_template "$TEMPLATE_DIR/feature/plan.md" "$dir/plan.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/plan.md" "$dir/plan.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "plan" && [[ "$(config_bool "gates" "require_plan_review" "true")" == "true" ]]; then
-    render_template "$TEMPLATE_DIR/feature/plan-review.md" "$dir/plan-review.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/plan-review.md" "$dir/plan-review.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "tasks"; then
-    render_template "$TEMPLATE_DIR/feature/tasks.md" "$dir/tasks.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/tasks.md" "$dir/tasks.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "tasks" && [[ "$(config_bool "gates" "require_task_review" "true")" == "true" ]]; then
-    render_template "$TEMPLATE_DIR/feature/task-review.md" "$dir/task-review.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/task-review.md" "$dir/task-review.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "dispatch"; then
-    render_template "$TEMPLATE_DIR/feature/dispatch.md" "$dir/dispatch.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/dispatch.md" "$dir/dispatch.md" "$request" "$request" "$type"
   fi
-  render_template "$TEMPLATE_DIR/feature/archive.md" "$dir/archive.md" "$request"
-  render_template "$TEMPLATE_DIR/feature/implementation-api.md" "$dir/implementation/api.md" "$request"
+  render_feature_template "$TEMPLATE_DIR/feature/archive.md" "$dir/archive.md" "$request" "$request" "$type"
+  render_feature_template "$TEMPLATE_DIR/feature/implementation-api.md" "$dir/implementation/api.md" "$request" "$request" "$type"
+  render_feature_template "$TEMPLATE_DIR/feature/test-cases.md" "$dir/test-cases.md" "$request" "$request" "$type"
+  render_feature_template "$TEMPLATE_DIR/feature/test-results.md" "$dir/test-results.md" "$request" "$request" "$type"
+  render_feature_template "$TEMPLATE_DIR/feature/manual-acceptance.md" "$dir/manual-acceptance.md" "$request" "$request" "$type"
+  render_feature_template "$TEMPLATE_DIR/feature/model-routing.md" "$dir/model-routing.md" "$request" "$request" "$type"
   while IFS= read -r side; do
-    render_template "$TEMPLATE_DIR/feature/implementation-$side.md" "$dir/results/$side.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/implementation-$side.md" "$dir/results/$side.md" "$request" "$request" "$type"
   done < <(implementation_target_sides)
-  render_template "$TEMPLATE_DIR/feature/implementation-fix.md" "$dir/results/fix.md" "$request"
+  render_feature_template "$TEMPLATE_DIR/feature/implementation-fix.md" "$dir/results/fix.md" "$request" "$request" "$type"
   if workflow_stages_for_type "$type" | grep -Fxq "test" && [[ "$(config_bool "gates" "require_tests_before_done" "true")" == "true" ]]; then
-    render_template "$TEMPLATE_DIR/feature/implementation-test.md" "$dir/implementation/test.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/implementation-test.md" "$dir/implementation/test.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "review" && [[ "$(config_bool "gates" "require_review_before_commit" "true")" == "true" ]]; then
-    render_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/implementation-review.md" "$dir/implementation/review.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "reuse-risk"; then
-    render_template "$TEMPLATE_DIR/feature/reuse-analysis.md" "$dir/reuse-analysis.md" "$request"
-    render_template "$TEMPLATE_DIR/feature/external-module-risk.md" "$dir/external-module-risk.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/reuse-analysis.md" "$dir/reuse-analysis.md" "$request" "$request" "$type"
+    render_feature_template "$TEMPLATE_DIR/feature/external-module-risk.md" "$dir/external-module-risk.md" "$request" "$request" "$type"
   fi
   if workflow_stages_for_type "$type" | grep -Fxq "security-review"; then
-    render_template "$TEMPLATE_DIR/feature/security-review.md" "$dir/security-review.md" "$request"
+    render_feature_template "$TEMPLATE_DIR/feature/security-review.md" "$dir/security-review.md" "$request" "$request" "$type"
   fi
 
+  append_manual_acceptance_feature "$name" "$request"
   upsert_feature_state "$name" "$request" "draft" "pending" "Manager" "subagent" "no" "Created by agentflow feature create" "$type"
   render_task_board
 
@@ -2056,8 +2385,9 @@ verify_stage_dispatch() {
   verify_stage_tasks "$dir"
   require_file "$dir/dispatch.md" "dispatch.md" || return
   require_no_placeholders "$dir/dispatch.md" "dispatch.md"
-  require_line_match "$dir/dispatch.md" '^\| Task \| Role \| Inputs \| Outputs \| Status \|' "dispatch.md is missing role assignment table"
+  require_line_match "$dir/dispatch.md" '^\| Task \| Role \| Model Profile \| Inputs \| Outputs \| Status \|' "dispatch.md is missing role assignment table"
   require_line_match "$dir/dispatch.md" '^\| API design \|' "dispatch.md is missing default dispatch rows"
+  verify_structured_record "$dir/model-routing.md" "model-routing.md"
 }
 
 verify_stage_implement() {
@@ -2124,6 +2454,9 @@ effective_key_files() {
   done < <(implementation_target_sides)
 
   if [[ "$(config_bool "gates" "require_tests_before_done" "true")" == "true" ]]; then
+    printf '%s\n' "$dir/test-cases.md"
+    printf '%s\n' "$dir/test-results.md"
+    printf '%s\n' "$dir/manual-acceptance.md"
     printf '%s\n' "$dir/implementation/test.md"
   fi
   if [[ "$(config_bool "gates" "require_review_before_commit" "true")" == "true" ]]; then
@@ -2146,6 +2479,11 @@ verify_stage_test() {
   verify_stage_implement "$dir"
 
   if [[ "$tests_required" == "true" ]]; then
+    verify_structured_record "$dir/test-cases.md" "test-cases.md"
+    verify_structured_record "$dir/test-results.md" "test-results.md"
+    require_file "$dir/manual-acceptance.md" "manual-acceptance.md"
+    require_no_placeholders "$dir/manual-acceptance.md" "manual-acceptance.md"
+    require_line_match "$dir/manual-acceptance.md" '^Status:[[:space:]]*(pending|accepted|failed|blocked)' "manual-acceptance.md must declare pending, accepted, failed, or blocked"
     verify_structured_record "$dir/implementation/test.md" "implementation/test.md"
     require_line_match "$dir/implementation/test.md" '^Status:[[:space:]]*(complete|passed)' "implementation/test.md must have a passed or complete result"
     if grep -Eiq 'not tested|untested|not run' "$dir/implementation/test.md"; then
@@ -2560,6 +2898,31 @@ first_nonempty_line() {
   printf '%s' "$fallback"
 }
 
+stage_context_mode() {
+  local stage="$1"
+  case "$stage" in
+    draft|spec|plan|tasks) printf 'planning' ;;
+    dispatch) printf 'dispatch' ;;
+    implement) printf 'implementation' ;;
+    test) printf 'testing' ;;
+    security-review|review) printf 'review' ;;
+    fix) printf 'fix' ;;
+    archive|done) printf 'archive' ;;
+    *) printf 'general' ;;
+  esac
+}
+
+optional_files_for_context() {
+  local key_files="$1"
+  local must_read="$2"
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    if ! printf '%s\n' "$must_read" | grep -Fqx "$file"; then
+      printf '%s\n' "$file"
+    fi
+  done <<< "$key_files"
+}
+
 required_files_for_gate() {
   local dir="$1"
   local gate="$2"
@@ -2591,7 +2954,7 @@ required_files_for_gate() {
       printf '%s\n' "$dir/security-review.md"
       ;;
     test)
-      printf '%s\n' "$dir/implementation/test.md"
+      printf '%s\n' "$dir/test-cases.md" "$dir/test-results.md" "$dir/manual-acceptance.md" "$dir/implementation/test.md"
       ;;
     review)
       printf '%s\n' "$dir/implementation/review.md"
@@ -2644,7 +3007,7 @@ must_read_files_for_stage() {
       printf '%s\n' "$dir/security-review.md" "$dir/implementation/api.md"
       ;;
     test)
-      printf '%s\n' "$dir/tasks.md" "$dir/implementation/test.md"
+      printf '%s\n' "$dir/tasks.md" "$dir/test-cases.md" "$dir/test-results.md" "$dir/manual-acceptance.md" "$dir/implementation/test.md"
       ;;
     review|fix)
       printf '%s\n' "$dir/implementation/review.md" "$dir/results/fix.md"
@@ -2680,11 +3043,13 @@ build_active_context() {
   local dir="$1"
   local feature_name feature_type workflow_stages current_stage next_gate output_file md_output_file
   local open_tasks key_files required_files must_read related_files goal open_questions blockers next_step forbidden_actions
+  local context_mode optional_files
   local error blocker_count
   feature_name="$(basename "$dir")"
   feature_type="$(feature_type_for_dir "$dir")"
   workflow_stages="$(workflow_stages_for_type "$feature_type")"
   current_stage="$(infer_feature_stage "$dir")"
+  context_mode="$(stage_context_mode "$current_stage")"
   next_gate="$(next_gate_for_stage "$current_stage" "$dir")"
   ensure_runtime_dirs
   output_file="$STATE_DIR/$ACTIVE_CONTEXT_FILE"
@@ -2694,6 +3059,7 @@ build_active_context() {
   key_files="$(effective_key_files "$dir" "$feature_name")"
   required_files="$(required_files_for_gate "$dir" "$next_gate")"
   must_read="$(must_read_files_for_stage "$dir" "$current_stage")"
+  optional_files="$(optional_files_for_context "$key_files" "$must_read")"
   related_files="$(printf '%s\n%s\n' "$must_read" "$required_files" | sed '/^$/d' | awk '!seen[$0]++' | head -12)"
   goal="$(first_nonempty_line "$(markdown_section_content "$dir/spec.md" "## User Goal")" "Goal not captured yet.")"
   open_questions="$(markdown_section_content "$dir/spec.md" "## Open Questions")"
@@ -2724,6 +3090,7 @@ build_active_context() {
   "feature_dir": "$(json_escape "$dir")",
   "feature_type": "$(json_escape "$feature_type")",
   "current_stage": "$(json_escape "$current_stage")",
+  "context_mode": "$(json_escape "$context_mode")",
   "next_gate": "$(json_escape "$next_gate")",
   "goal": "$(json_escape "$goal")",
   "next_step": "$(json_escape "$next_step")",
@@ -2735,6 +3102,9 @@ $(emit_json_array_from_lines "$required_files" "    ")
   ],
   "must_read": [
 $(emit_json_array_from_lines "$must_read" "    ")
+  ],
+  "optional_files": [
+$(emit_json_array_from_lines "$optional_files" "    ")
   ],
   "workflow_stages": [
 $(emit_json_array_from_lines "$workflow_stages" "    ")
@@ -2778,6 +3148,10 @@ $(emit_markdown_list_from_lines "$workflow_stages" "No workflow stages inferred.
 
 $current_stage
 
+## Context Mode
+
+$context_mode
+
 ## Current Gate
 
 $next_gate
@@ -2793,6 +3167,10 @@ $(emit_markdown_list_from_lines "$required_files" "No required files for the cur
 ## Must Read
 
 $(emit_markdown_list_from_lines "$must_read" "No must-read files inferred.")
+
+## Optional Only If Needed
+
+$(emit_markdown_list_from_lines "$optional_files" "No optional files listed.")
 
 ## Forbidden Actions
 
@@ -3112,6 +3490,152 @@ handle_reuse_command() {
   esac
 }
 
+parse_adapter_flag() {
+  local adapter="codex"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --adapter)
+        [[ $# -ge 2 ]] || { printf 'Missing value for --adapter\n' >&2; exit 1; }
+        adapter="$2"
+        shift 2
+        ;;
+      --adapter=*)
+        adapter="${1#--adapter=}"
+        shift
+        ;;
+      --execute)
+        shift
+        ;;
+      --stage)
+        [[ $# -ge 2 ]] || { printf 'Missing value for --stage\n' >&2; exit 1; }
+        shift 2
+        ;;
+      --stage=*)
+        shift
+        ;;
+      *)
+        printf 'Unknown dispatch option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+  printf '%s' "$adapter"
+}
+
+has_execute_flag() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --execute) return 0 ;;
+    esac
+    shift
+  done
+  return 1
+}
+
+parse_optional_stage_flag() {
+  local value=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --stage)
+        [[ $# -ge 2 ]] || { printf 'Missing value for --stage\n' >&2; exit 1; }
+        value="$2"
+        shift 2
+        ;;
+      --stage=*)
+        value="${1#--stage=}"
+        shift
+        ;;
+      --adapter|--adapter=*|--execute)
+        if [[ "$1" == "--adapter" ]]; then
+          shift 2
+        else
+          shift
+        fi
+        ;;
+      *)
+        printf 'Unknown stage option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+  if [[ -z "$value" ]]; then
+    printf 'Missing required --stage option\n' >&2
+    exit 1
+  fi
+  printf '%s' "$value"
+}
+
+handle_dispatch_command() {
+  local subcmd feature adapter execute="false"
+  if [[ $# -lt 1 ]]; then
+    usage
+    exit 1
+  fi
+
+  subcmd="$1"
+  case "$subcmd" in
+    plan)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      feature="$2"
+      adapter="$(parse_adapter_flag "${@:3}")"
+      case "$adapter" in
+        codex) dispatch_codex_plan "$feature" ;;
+        *) printf 'Unsupported dispatch adapter: %s\n' "$adapter" >&2; exit 1 ;;
+      esac
+      ;;
+    run)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      feature="$2"
+      adapter="$(parse_adapter_flag "${@:3}")"
+      has_execute_flag "${@:3}" && execute="true"
+      case "$adapter" in
+        codex) dispatch_codex_run "$feature" "$execute" ;;
+        *) printf 'Unsupported dispatch adapter: %s\n' "$adapter" >&2; exit 1 ;;
+      esac
+      ;;
+    *)
+      dispatch_feature "$subcmd"
+      ;;
+  esac
+}
+
+handle_stage_command() {
+  local subcmd feature stage adapter execute="false"
+  if [[ $# -lt 1 ]]; then
+    usage
+    exit 1
+  fi
+
+  subcmd="$1"
+  case "$subcmd" in
+    plan)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      feature="$2"
+      stage="$(parse_optional_stage_flag "${@:3}")"
+      adapter="$(parse_adapter_flag "${@:3}")"
+      case "$adapter" in
+        codex) stage_codex_plan "$feature" "$stage" ;;
+        *) printf 'Unsupported stage adapter: %s\n' "$adapter" >&2; exit 1 ;;
+      esac
+      ;;
+    run)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      feature="$2"
+      stage="$(parse_optional_stage_flag "${@:3}")"
+      adapter="$(parse_adapter_flag "${@:3}")"
+      has_execute_flag "${@:3}" && execute="true"
+      case "$adapter" in
+        codex) stage_codex_run "$feature" "$stage" "$execute" ;;
+        *) printf 'Unsupported stage adapter: %s\n' "$adapter" >&2; exit 1 ;;
+      esac
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 sync_tasks_for_feature() {
   local dir tasks_file current_stage tmp_file changes=0
   dir="$(feature_path "$1")"
@@ -3234,8 +3758,14 @@ doctor_check() {
   for required_template in \
     "$TEMPLATE_DIR/project/AGENTS.md" \
     "$TEMPLATE_DIR/project-docs/03_TASK_BOARD.md" \
+    "$TEMPLATE_DIR/project-docs/04_MANUAL_ACCEPTANCE.md" \
+    "$TEMPLATE_DIR/adapters/codex-dispatch-prompt.md" \
     "$TEMPLATE_DIR/feature/archive.md" \
     "$TEMPLATE_DIR/feature/implementation-api.md" \
+    "$TEMPLATE_DIR/feature/model-routing.md" \
+    "$TEMPLATE_DIR/feature/test-cases.md" \
+    "$TEMPLATE_DIR/feature/test-results.md" \
+    "$TEMPLATE_DIR/feature/manual-acceptance.md" \
     "$TEMPLATE_DIR/modules/external_modules.yml" \
     "$TEMPLATE_DIR/modules/external_module_policy.yml"; do
     [[ -f "$required_template" ]] && printf 'OK template: %s\n' "$required_template" || { printf 'FAIL missing template: %s\n' "$required_template" >&2; failed=1; }
@@ -3432,6 +3962,10 @@ main() {
       shift
       handle_reuse_command "$@"
       ;;
+    stage)
+      shift
+      handle_stage_command "$@"
+      ;;
     state)
       if [[ "${2:-}" == "migrate" ]]; then
         migrate_feature_state
@@ -3501,7 +4035,8 @@ main() {
       ;;
     dispatch)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi
-      dispatch_feature "$2"
+      shift
+      handle_dispatch_command "$@"
       ;;
     archive)
       if [[ $# -lt 2 ]]; then usage; exit 1; fi

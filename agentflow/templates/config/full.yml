@@ -54,6 +54,51 @@ orchestrator:
   mode: team-pipeline
   fallback_provider: codex-subagents
 
+subagents:
+  # 模型路由只生成调度建议，不直接调用外部模型。
+  # Manager 应根据 feature type、task complexity、risk、role 和用户覆盖项选择中性 reasoning 档位。
+  default_model_profile: medium
+  model_profiles:
+    low:
+      codex_reasoning_effort: low
+      adapter_hint: "fast responses with lighter reasoning"
+      use_for:
+        - trivial
+        - docs
+        - archive
+        - low-risk-mechanical-edits
+    medium:
+      codex_reasoning_effort: medium
+      adapter_hint: "balanced speed and reasoning depth"
+      use_for:
+        - standard
+        - bug
+        - implementation
+        - ai-tests
+    high:
+      codex_reasoning_effort: high
+      adapter_hint: "greater reasoning depth for complex problems"
+      use_for:
+        - major
+        - architecture
+        - code-review
+        - complex-debugging
+    extra-high:
+      codex_reasoning_effort: extra-high
+      adapter_hint: "maximum reasoning depth for sensitive or critical work"
+      use_for:
+        - sensitive
+        - security-review
+        - auth
+        - permission
+        - payment
+  routing_rules:
+    trivial: low
+    bug: medium
+    standard: medium
+    major: high
+    sensitive: extra-high
+
 skills:
   provider: vendored-superpowers
   vendored_superpowers: true
@@ -92,6 +137,17 @@ implementation:
     - backend
     - frontend
     - mobile
+
+testing:
+  # AI 测试是 feature 级强制闭环：需要生成测试用例，执行可自动化的测试，
+  # 并记录结果。人工验收是异步队列，通常到 milestone/release 再集中处理。
+  ai_required: true
+  require_test_cases: true
+  require_test_results: true
+  manual_acceptance:
+    enabled: true
+    blocking_level: release
+    allow_pending_before_archive: true
 
 review:
   # 审查模式。
